@@ -1,0 +1,19 @@
+# ECE 597 - Multi-Stage IoT Intrusion Detection
+# Python 3.11 recommended. Install:  pip install -r requirements.txt
+# Keep this sparse; add pinned versions as the project grows.
+
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+jupyter
+
+# ---- Deep learning: TEAM MUST PICK ONE (do not split the team) ----
+# Uncomment the chosen framework:
+# torch          # PyTorch
+# tensorflow     # TensorFlow
+
+# ---- Optional but likely useful ----
+# xgboost
+# imbalanced-learn   # for handling the ~98/2 class imbalance

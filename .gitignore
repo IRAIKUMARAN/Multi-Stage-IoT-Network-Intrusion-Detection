@@ -1,0 +1,30 @@
+# ---- Dataset files: NEVER commit (too large, GitHub rejects >100MB) ----
+*.csv
+*.pcap
+*.pcap_Flow*
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+*.egg-info/
+
+# ---- Models / big outputs (keep repo light) ----
+*.pt
+*.pth
+*.h5
+*.keras
+*.pkl
+*.joblib
+
+# ---- OS / editor ----
+.DS_Store
+.vscode/
+.idea/
