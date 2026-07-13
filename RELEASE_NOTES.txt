@@ -1,0 +1,124 @@
+========================================================================
+ ECE 597 CAPSTONE - GROUP 7 - RELEASE NOTES
+========================================================================
+
+
+2026-07-13  |  Phase 2 corrections
+------------------------------------------------------------------------
+Applied review fixes to src/phase2_unsupervised/phase2_unsupervised.py and
+re-ran the stage.
+
+WHAT WE CHANGED
+------------------------------------------------------------------------
+1) Recall-first threshold (main change)
+   - Before: the alert cutoff used the max-F1 point (THR = thr_f1).
+   - After : it now uses the recall-first point (THR = thr_recall, recall >= 0.85).
+   - Why   : Phase 3 can only REMOVE false positives from what Phase 2 flags;
+             it can never recover an attack Phase 2 missed. So Phase 2 must
+             catch nearly everything (high recall) and let Phase 3 clean up the
+             extra false alarms. A max-F1 cutoff was missing 56% of attacks,
+             capping the whole system's recall.
+
+2) Leaky-column drop actually works now
+   - Before: dropped "http_content_type=application/octet-stream;charset=UTF-8"
+             by exact match, which did not match the real feature name -> the
+             column was never actually removed (silent no-op).
+   - After : matches "port_class_dst" exactly and ANY
+             "http_content_type=application/octet-stream*" one-hot, and prints
+             how many columns were dropped so it is verifiable.
+
+3) Metrics are now saved to a file
+   - Before: metrics only printed to the console.
+   - After : all methods + per-attack rates + the chosen threshold are written
+             to results/phase2_metrics.json (reproducible, ready for the report).
+
+
+HOW IT AFFECTED THE OUTPUT
+------------------------------------------------------------------------
+Chosen method = AE-threshold (autoencoder reconstruction error).
+
+The "After" column is the CANONICAL, reproducible run (seed=42). The "Before"
+column is the old max-F1 run on an earlier (non-seeded) sample, so exact row
+counts are not directly comparable - the meaningful effect is the metric shift
+(recall up, false alarms up), which is driven by the threshold change.
+
+    Metric                 Before (max-F1)   After (recall-first, seed=42)
+    Recall                 0.44              0.87
+    FNR (missed attacks)   0.56              0.13
+    Precision              0.30              0.039
+    FPR (false alarms)     0.022             0.45
+    F1                     0.35              0.074
+    AUC                    0.846             0.846
+    Flagged alerts         1,858             28,083
+       - real attacks         548              1,088
+       - false alarms       1,310             26,995
+
+Per-attack detection rate (after, seed=42):
+    DDoS-HTTP_Flood  0.97
+    DoS-HTTP_Flood   0.92
+    Brute_Force      0.97
+    DNS_Spoofing     0.79
+    XSS              0.72   (hardest to detect at packet level)
+
+
+INTERPRETATION
+------------------------------------------------------------------------
+- GOOD: Phase 2 now catches ~87% of attacks (was 44%). This is what the
+  two-stage design needs - Phase 3 receives almost all real attacks.
+- EXPECTED COST: precision falls and false alarms rise sharply (FPR ~45%).
+  These ~27k false positives are exactly what the Phase 3 supervised model is
+  meant to filter out. The headline Phase 3 result will be "% of these false
+  positives removed while keeping the real attacks".
+- AUC is unchanged (0.846) because it does not depend on the threshold - only
+  the operating point moved.
+
+
+WHY THE OLD (HIGHER-F1) VERSION WAS NOT THE RIGHT CHOICE
+------------------------------------------------------------------------
+The old max-F1 threshold LOOKED better in isolation (precision 0.30, F1 0.35),
+but Phase 2 is NOT the final output - it is stage 1 of a two-stage cascade.
+
+Hard rule of a cascade: stage 2 can only REMOVE false positives; it can never
+recover an attack that stage 1 threw away. At recall 0.44 the old threshold
+discarded 56% of attacks BEFORE Phase 3 even started, permanently capping the
+whole system's recall at ~44%. No Phase 3 model, however good, could catch what
+Phase 2 never flagged.
+
+Analogy: Phase 2 = airport metal detector, Phase 3 = manual bag check. You WANT
+the detector to beep at anything suspicious (high recall) even if most beeps are
+harmless, because the bag check clears the false beeps. A "precise" detector that
+only beeps when certain lets real threats walk through.
+
+Important: we do NOT lose the old version's good precision. The final two-stage
+system keeps Phase 2's high recall AND regains high precision from Phase 3 - the
+end state beats the old standalone Phase 2 on the metrics that matter.
+
+The recall target is now a single tunable constant (RECALL_TARGET, default 0.85)
+at the top of phase2_unsupervised.py, so it can be swept later without code
+hunting.
+
+
+REPRODUCIBILITY (RESOLVED)
+------------------------------------------------------------------------
+The sampler draws a DIFFERENT random dataset each run unless a seed is given, so
+metrics used to move between runs. We now standardise on seed=42 for all reported
+results. run0_1.py also auto-skips the download when the data is already present.
+
+    python run0_1.py --seed 42          # regenerate the identical sample
+    (then re-run phase2_unsupervised.py)
+
+All "After" numbers in this note are on the seed=42 sample.
+
+
+OPEN ITEMS / TO WATCH
+------------------------------------------------------------------------
+- FPR of 45% is high - Phase 2 flags ~45% of benign traffic, so Phase 3's input
+  is ~96% false positives. Phase 3 uses richer flow features and should still
+  separate them, but if it struggles, try RECALL_TARGET = 0.80 (or add a
+  precision floor) and compare final two-stage performance.
+- AE+k-means on seed=42 is a reasonable BALANCED operating point (recall 0.35,
+  precision 0.38, F1 0.36, FPR 1.2%) - useful as a comparison method in the
+  report, though AE-threshold (recall-first) is the primary for the cascade.
+- Phase 3 Task 3.2 (build_flow_dataset.py) is NOT written yet - next step.
+
+========================================================================

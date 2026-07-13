@@ -10,6 +10,13 @@ Metrics : precision/recall/F1, per-attack detection rate, FPR/FNR, AUC-ROC,
 
 import numpy as np, pandas as pd
 from pathlib import Path
+
+# ---- TUNABLE PARAMETERS ----
+# Phase 2 is stage 1 of a cascade. Stage 2 (Phase 3) can only REMOVE false
+# positives, never recover a missed attack, so we bias Phase 2 toward RECALL.
+# Lower this (e.g. 0.80) if Phase 3 gets overwhelmed by too many false alarms.
+RECALL_TARGET = 0.85
+
 # SECTION 1 - LOAD DATA
 # Load the preprocessed feature matrix (already scaled). Labels are read too, but ONLY for evaluation / threshold tuning - the models never train on them.
 
@@ -24,10 +31,14 @@ book   = pd.read_csv(DATA / "packet_bookkeeping.csv")
 y_type = book["attack_type"].to_numpy()
 y      = (y_type != "Benign").astype(int)          
 
-# drop the two leaky columns the verifier flagged 
-drop = ["port_class_dst", "http_content_type=application/octet-stream;charset=UTF-8"]
-mask = ~np.isin(feat_names, drop)
+# drop the leaky columns the verifier flagged. Match port_class_dst exactly, and any
+# http_content_type=application/octet-stream* one-hot (covers the ;charset=UTF-8 suffix),
+# so the drop actually happens instead of silently matching nothing.
+mask = ~np.array([f == "port_class_dst"
+                  or f.startswith("http_content_type=application/octet-stream")
+                  for f in feat_names])
 X, feat_names = X[:, mask], feat_names[mask]
+print("dropped leaky cols:", int((~mask).sum()))
 print("X:", X.shape, "| attack rate:", round(y.mean(), 4))
 
 # SECTION 2 - TRAIN / VAL / TEST SPLIT
@@ -98,16 +109,19 @@ prec, rec, thrs = precision_recall_curve(yva, err_va)
 f1s  = 2 * prec * rec / (prec + rec + 1e-12)
 best = f1s[:-1].argmax()
 thr_f1 = thrs[best]
-ok = rec[:-1] >= 0.85
+ok = rec[:-1] >= RECALL_TARGET
 thr_recall = thrs[ok].max() if ok.any() else thr_f1
-THR         = thr_f1                                
+# Two-stage design: Phase 2 should favour RECALL (catch nearly everything), because
+# Phase 3 can only REMOVE false positives later — it can never recover a missed attack.
+# So we use the recall-first cutoff, not max-F1.
+THR         = thr_recall
 ae_pred_te  = (err_te > THR).astype(int)
-print(f"\nchosen AE threshold={THR:.4g}  (val best-F1={f1s[best]:.3f})")
+print(f"\nchosen AE threshold={THR:.4g}  (recall-first; F1-optimal was {f1s[best]:.3f})")
 
 # SECTION 8 - EVALUATE ALL METHODS ON TEST
 from sklearn.metrics import (precision_score, recall_score, f1_score, confusion_matrix)
 def evaluate(name, y_true, pred, cont_score):
-    """Print the full metric line for one method."""
+    """Print the full metric line for one method AND return it as a dict."""
     auc = roc_auc_score(y_true, cont_score)
     p   = precision_score(y_true, pred, zero_division=0)
     r   = recall_score(y_true, pred)
@@ -116,21 +130,30 @@ def evaluate(name, y_true, pred, cont_score):
     fpr, fnr = fp / (fp + tn), fn / (fn + tp)
     print(f"[{name:>14}] AUC={auc:.3f} P={p:.3f} R={r:.3f} "
           f"F1={f1:.3f} FPR={fpr:.3f} FNR={fnr:.3f}")
+    return {"AUC": float(auc), "precision": float(p), "recall": float(r), "f1": float(f1),
+            "FPR": float(fpr), "FNR": float(fnr),
+            "tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)}
 
 print()
-evaluate("AE-threshold", yte, ae_pred_te,  err_te)
-evaluate("AE-kmeans",    yte, km_pred_te,  err_te)
-evaluate("IsolationFor", yte, iso_pred_te, iso_score_te)
+metrics = {}
+metrics["AE_threshold"]    = evaluate("AE-threshold", yte, ae_pred_te,  err_te)
+metrics["AE_kmeans"]       = evaluate("AE-kmeans",    yte, km_pred_te,  err_te)
+metrics["IsolationForest"] = evaluate("IsolationFor", yte, iso_pred_te, iso_score_te)
 
-pred = ae_pred_te                                  
+pred = ae_pred_te
 
 # SECTION 9 - PER-ATTACK DETECTION RATE (primary method)
 
 print("\nPer-attack detection rate (AE-threshold):")
+per_attack = {}
 for a in ["DDoS-HTTP_Flood", "DoS-HTTP_Flood", "DNS_Spoofing", "XSS", "Brute_Force"]:
     m = (tte == a)
     if m.sum():
-        print(f"  {a:16s} n={m.sum():4d}  caught={pred[m].mean():.3f}")
+        rate = float(pred[m].mean())
+        per_attack[a] = {"n": int(m.sum()), "detection_rate": rate}
+        print(f"  {a:16s} n={m.sum():4d}  caught={rate:.3f}")
+metrics["per_attack_detection"] = per_attack
+metrics["threshold"] = float(THR)
 
 # SECTION 10 - PLOTS (confusion matrix + ROC) -> results/
 import matplotlib
@@ -158,7 +181,11 @@ plt.title("Phase 2 ROC"); plt.legend(); plt.tight_layout()
 plt.savefig(RESULTS / "phase2_roc.png", dpi=150); plt.close()
 print("\nplots saved to", RESULTS)
 
-# SECTION 11 - SAVE FLAGGED ALERTS (handoff to Phase 3)
+# SECTION 11 - SAVE FLAGGED ALERTS (handoff to Phase 3) + METRICS
 flagged = book.iloc[ite][pred.astype(bool)]
 flagged.to_csv(RESULTS / "flagged_packet_ids.csv", index=False)
 print("flagged alerts saved:", len(flagged))
+
+import json
+(RESULTS / "phase2_metrics.json").write_text(json.dumps(metrics, indent=2))
+print("metrics saved to", RESULTS / "phase2_metrics.json")

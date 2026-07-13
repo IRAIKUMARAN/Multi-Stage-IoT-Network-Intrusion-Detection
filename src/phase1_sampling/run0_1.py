@@ -13,19 +13,42 @@ HOW TO RUN
   - Terminal:  python run0_1.py
 
 FLAGS
-  --skip-download   skip step 1 if the data is already downloaded
+  --skip-download   force-skip step 1 even if some files are missing
+  --force-download  re-download even if the data is already present
   --seed N          reproducible sampling (default: different mix each run)
   --no-verify       skip the final verification step
+
+By default the download step is skipped AUTOMATICALLY when all required data
+files are already present in the data folder (no need to pass --skip-download).
 """
 import argparse
 import subprocess
 import sys
 from pathlib import Path
 
+from config import RAW                             # data folder (~/ece597-data/raw)
+
 HERE = Path(__file__).resolve().parent            # src/phase1_sampling
 REPO = HERE.parents[1]                             # repo root
 VERIFY = REPO / "notebooks" / "verify_preprocess.py"
 PY = sys.executable                                # the same Python running this file
+
+# Packet CSVs the sampler needs. If all are found under RAW, the download is skipped.
+REQUIRED_FILES = [
+    "BenignTraffic.csv", "DDoS-HTTP_Flood-.csv", "DoS-HTTP_Flood.csv",
+    "DNS_Spoofing.csv", "XSS.csv", "DictionaryBruteForce.csv",
+]
+
+
+def data_present():
+    """True only if every required packet CSV already exists somewhere under RAW."""
+    if not RAW.exists():
+        return False
+    missing = [f for f in REQUIRED_FILES if not any(RAW.rglob(f))]
+    if missing:
+        print(f"Missing {len(missing)} data file(s), e.g. {missing[:3]} -> will download.")
+        return False
+    return True
 
 
 def run(title, args, cwd=HERE):
@@ -42,16 +65,20 @@ def run(title, args, cwd=HERE):
 def main():
     ap = argparse.ArgumentParser(description="Run Phase 0 + Phase 1 end to end.")
     ap.add_argument("--skip-download", action="store_true",
-                    help="Skip the download step (data already present).")
+                    help="Force-skip the download step even if files are missing.")
+    ap.add_argument("--force-download", action="store_true",
+                    help="Download even if the data is already present.")
     ap.add_argument("--seed", type=int, default=None,
                     help="Random seed for sampling. Omit for a different mix each run.")
     ap.add_argument("--no-verify", action="store_true",
                     help="Skip the verification step.")
     args = ap.parse_args()
 
-    # 1. Phase 0 - download
+    # 1. Phase 0 - download (auto-skipped when the data is already there)
     if args.skip_download:
-        print("Skipping download step (--skip-download).")
+        print("Skipping download (--skip-download).")
+    elif data_present() and not args.force_download:
+        print(f"Dataset already present in {RAW} - skipping download.")
     else:
         run("Phase 0  -  Download dataset", ["download_dataset.py", "--download"])
 

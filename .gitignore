@@ -43,3 +43,7 @@ __pycache__/
 # secrets
 *cookie*
 .env
+
+# Exception: small Phase 2 -> Phase 3 handoff file is intentionally tracked
+# (needed by Phase 3; keep it reproducible by always sampling with --seed 42)
+!results/flagged_packet_ids.csv
