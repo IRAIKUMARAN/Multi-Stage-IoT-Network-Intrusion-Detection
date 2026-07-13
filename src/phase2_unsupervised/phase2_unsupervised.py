@@ -1,21 +1,164 @@
-"""Phase 2 - Unsupervised anomaly detection on PACKET-level data.
+"""
+PHASE 2 - Unsupervised anomaly detection on PACKET-level data
 
-
-Task 2.1: train a model that separates normal vs anomalous packets 
-           (e.g. autoencoder, k-means).
-           DO NOT use labels during training.
-
-
+Task 2.1: train unsupervised models that separate normal vs anomalous packets
+          (autoencoder, k-means, isolation forest). NO labels in training.
 Task 2.2: pick alert thresholds, analyze false positives vs negatives.
-Metrics: precision/recall/F1, per-attack detection rate, FPR/FNR, AUC-ROC,
-         confusion matrix.
-         
+Metrics : precision/recall/F1, per-attack detection rate, FPR/FNR, AUC-ROC,
+          confusion matrix.
 """
 
-## Comment guidelines: For all the functions explain its working in own words (1-2 lines max)
-def train(X): # change the function when implementing the code
-    raise NotImplementedError
+import numpy as np, pandas as pd
+from pathlib import Path
+# SECTION 1 - LOAD DATA
+# Load the preprocessed feature matrix (already scaled). Labels are read too, but ONLY for evaluation / threshold tuning - the models never train on them.
 
+import sys
+sys.path.append(str(Path(__file__).resolve().parents[1] / "phase1_sampling"))
+from config import SAMPLES as DATA
+d          = np.load(DATA / "packet_preprocessed.npz", allow_pickle=True)
+X          = d["X"]
+feat_names = d["feature_names"].astype(str)
 
-def score(model, X): # change the function when implementing the code
-    raise NotImplementedError
+book   = pd.read_csv(DATA / "packet_bookkeeping.csv")
+y_type = book["attack_type"].to_numpy()
+y      = (y_type != "Benign").astype(int)          
+
+# drop the two leaky columns the verifier flagged 
+drop = ["port_class_dst", "http_content_type=application/octet-stream;charset=UTF-8"]
+mask = ~np.isin(feat_names, drop)
+X, feat_names = X[:, mask], feat_names[mask]
+print("X:", X.shape, "| attack rate:", round(y.mean(), 4))
+
+# SECTION 2 - TRAIN / VAL / TEST SPLIT
+from sklearn.model_selection import train_test_split
+idx = np.arange(len(X))
+itr, ite = train_test_split(idx, test_size=0.30, random_state=42, stratify=y)
+itr, iva = train_test_split(itr, test_size=0.20, random_state=42, stratify=y[itr])
+
+Xtr, Xva, Xte = X[itr], X[iva], X[ite]
+ytr, yva, yte = y[itr], y[iva], y[ite]
+tte = y_type[ite]
+print("train/val/test:", len(itr), len(iva), len(ite))
+
+# SECTION 3 - AUTOENCODER (Task 2.1)
+# Learns to reconstruct NORMAL traffic; attacks reconstruct poorly, so the per-row reconstruction error becomes the anomaly score.
+from sklearn.neural_network import MLPRegressor
+from sklearn.metrics import roc_auc_score
+
+def train_ae(Xtrain, hidden, max_iter=80):
+    """Train an autoencoder (input==target) with a given architecture. No labels."""
+    ae = MLPRegressor(hidden_layer_sizes=hidden, activation="relu", solver="adam",
+                      max_iter=max_iter, early_stopping=True, random_state=42)
+    ae.fit(Xtrain, Xtrain)
+    return ae
+
+def recon_error(model, A):
+    """Per-row reconstruction error (MSE). Higher = more abnormal."""
+    return np.mean((A - model.predict(A)) ** 2, axis=1)
+
+# SECTION 4 - AE HYPERPARAMETER SWEEP (Task 2.1: "tune systematically")
+# Try several architectures; keep the one with the best VALIDATION AUC. Using val AUC for model selection is standard - the AE itself never sees y.
+configs = [(64, 16, 64), (128, 32, 128), (64, 8, 64), (32,)]
+sweep = []
+for h in configs:
+    ae_h  = train_ae(Xtr, h, max_iter=40)        
+    auc_h = roc_auc_score(yva, recon_error(ae_h, Xva))
+    sweep.append((auc_h, h))
+    print(f"  AE {str(h):16s} val AUC={auc_h:.3f}")
+
+best_auc, best_h = max(sweep)
+print(f"best AE architecture: {best_h}  (val AUC={best_auc:.3f})")
+
+ae = train_ae(Xtr, best_h, max_iter=80)          
+err_tr, err_va, err_te = recon_error(ae, Xtr), recon_error(ae, Xva), recon_error(ae, Xte)
+
+# SECTION 5 - ISOLATION FOREST (second unsupervised method, for comparison)
+from sklearn.ensemble import IsolationForest
+
+iso = IsolationForest(n_estimators=200, contamination=0.02,
+                      random_state=42, n_jobs=-1).fit(Xtr)
+iso_score_te = -iso.score_samples(Xte)             # higher = more anomalous
+iso_pred_te  = (iso.predict(Xte) == -1).astype(int)
+
+# SECTION 6 - AE + K-MEANS (the instructor-suggested combo, label-free cutoff)
+# Cluster the (log-scaled) error into 2 groups; the higher-error group = alerts.
+from sklearn.cluster import KMeans
+km   = KMeans(n_clusters=2, n_init=10, random_state=42).fit(np.log1p(err_tr).reshape(-1, 1))
+anom = int(np.argmax([err_tr[km.labels_ == c].mean() for c in (0, 1)]))
+km_pred_te = (km.predict(np.log1p(err_te).reshape(-1, 1)) == anom).astype(int)
+
+# SECTION 7 - THRESHOLD SELECTION ON VALIDATION (Task 2.2)
+# Pick the AE cutoff on VAL (not test). Two defensible operating points:
+#   thr_f1     - balanced (max F1)
+#   thr_recall - recall-first, the right choice for a 2-stage IDS (Phase 3 cleans the extra false positives later).
+
+from sklearn.metrics import precision_recall_curve
+prec, rec, thrs = precision_recall_curve(yva, err_va)
+f1s  = 2 * prec * rec / (prec + rec + 1e-12)
+best = f1s[:-1].argmax()
+thr_f1 = thrs[best]
+ok = rec[:-1] >= 0.85
+thr_recall = thrs[ok].max() if ok.any() else thr_f1
+THR         = thr_f1                                
+ae_pred_te  = (err_te > THR).astype(int)
+print(f"\nchosen AE threshold={THR:.4g}  (val best-F1={f1s[best]:.3f})")
+
+# SECTION 8 - EVALUATE ALL METHODS ON TEST
+from sklearn.metrics import (precision_score, recall_score, f1_score, confusion_matrix)
+def evaluate(name, y_true, pred, cont_score):
+    """Print the full metric line for one method."""
+    auc = roc_auc_score(y_true, cont_score)
+    p   = precision_score(y_true, pred, zero_division=0)
+    r   = recall_score(y_true, pred)
+    f1  = f1_score(y_true, pred)
+    tn, fp, fn, tp = confusion_matrix(y_true, pred).ravel()
+    fpr, fnr = fp / (fp + tn), fn / (fn + tp)
+    print(f"[{name:>14}] AUC={auc:.3f} P={p:.3f} R={r:.3f} "
+          f"F1={f1:.3f} FPR={fpr:.3f} FNR={fnr:.3f}")
+
+print()
+evaluate("AE-threshold", yte, ae_pred_te,  err_te)
+evaluate("AE-kmeans",    yte, km_pred_te,  err_te)
+evaluate("IsolationFor", yte, iso_pred_te, iso_score_te)
+
+pred = ae_pred_te                                  
+
+# SECTION 9 - PER-ATTACK DETECTION RATE (primary method)
+
+print("\nPer-attack detection rate (AE-threshold):")
+for a in ["DDoS-HTTP_Flood", "DoS-HTTP_Flood", "DNS_Spoofing", "XSS", "Brute_Force"]:
+    m = (tte == a)
+    if m.sum():
+        print(f"  {a:16s} n={m.sum():4d}  caught={pred[m].mean():.3f}")
+
+# SECTION 10 - PLOTS (confusion matrix + ROC) -> results/
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt, seaborn as sns
+from sklearn.metrics import roc_curve
+
+RESULTS = Path(__file__).resolve().parents[2] / "results"
+RESULTS.mkdir(exist_ok=True)
+
+cm = confusion_matrix(yte, pred)
+plt.figure(figsize=(4, 3.5))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+            xticklabels=["Benign", "Attack"], yticklabels=["Benign", "Attack"])
+plt.xlabel("Predicted"); plt.ylabel("Actual"); plt.title("Phase 2 Confusion Matrix")
+plt.tight_layout(); plt.savefig(RESULTS / "phase2_confusion_matrix.png", dpi=150); plt.close()
+
+plt.figure(figsize=(4, 3.5))
+for nm, sc in [("Autoencoder", err_te), ("IsolationForest", iso_score_te)]:
+    fpr_c, tpr_c, _ = roc_curve(yte, sc)
+    plt.plot(fpr_c, tpr_c, label=f"{nm} (AUC={roc_auc_score(yte, sc):.3f})")
+plt.plot([0, 1], [0, 1], "--", color="gray")
+plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
+plt.title("Phase 2 ROC"); plt.legend(); plt.tight_layout()
+plt.savefig(RESULTS / "phase2_roc.png", dpi=150); plt.close()
+print("\nplots saved to", RESULTS)
+
+# SECTION 11 - SAVE FLAGGED ALERTS (handoff to Phase 3)
+flagged = book.iloc[ite][pred.astype(bool)]
+flagged.to_csv(RESULTS / "flagged_packet_ids.csv", index=False)
+print("flagged alerts saved:", len(flagged))
