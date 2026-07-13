@@ -96,6 +96,12 @@ class PacketPreprocessor:
         self.constant_cols_ = filled.columns[filled.nunique() <= 1].tolist()
 
         X = self._assemble(df)
+        # drop features that ended up constant AFTER assembly
+        # (e.g. presence flags for fields present in every packet)
+        nuniq = X.nunique()
+        dead = nuniq[nuniq <= 1].index.tolist()
+        self.constant_cols_ += dead
+        X = X.drop(columns=dead)
         self.feature_names_ = X.columns.tolist()
         self.scaler_ = StandardScaler().fit(X.values)
         return self
