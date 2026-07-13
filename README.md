@@ -18,13 +18,8 @@ supervised by Dr. Ardeshir Shojaeinasab & Riham AlTawy.
 
 ## Project overview
 
-The system detects five attack types :
-
-**1. DDoS-HTTP Flood**
-**2. DoS-HTTP Flood**
-**3. DNS Spoofing**
-**4. XSS**
-**5. Brute Force — in two stages:**
+The system detects five attack types — **DDoS-HTTP Flood, DoS-HTTP Flood,
+DNS Spoofing, XSS, Brute Force** — in two stages:
 
 - **Phase 2 (unsupervised, packet-level):** real-time anomaly detection. Learns
   "normal" traffic and flags outliers. No labels used in training.
@@ -39,19 +34,23 @@ The system detects five attack types :
 ├── requirements.txt     # dependencies (pick ONE DL framework)
 ├── AI_USAGE_LOG.md      # log every AI tool use (required)
 ├── .gitignore           # excludes large dataset files
-├── data/
-│   ├── raw/             # downloaded CSVs (NOT committed)
-│   └── processed/       # sampled/preprocessed data (NOT committed)
+├── .env.example         # template for secrets/paths (copy to .env)
 ├── src/
-│   ├── sampling.py             # Task 1.1 - dataset generation
-│   ├── phase1_preprocessing.py # Task 1.2 - preprocessing
-│   ├── phase2_unsupervised.py# Phase 2 - packet-level anomaly detection
-│   ├── phase3_supervised.py  # Phase 3 - flow-level classifier
-│   └── utils.py              # shared helpers
-├── notebooks/           # exploration & visualizations
+│   ├── phase1_sampling/
+│   │   ├── config.py           # data paths + .env loading (single source of truth)
+│   │   ├── download_dataset.py # Phase 0 - fetch the CIC files
+│   │   ├── generate_dataset.py # Task 1.1 - sampling function
+│   │   ├── preprocess.py       # Task 1.2 - preprocessing pipeline
+│   │   └── run0_1.py           # ONE-CLICK runner: Phase 0 + Phase 1
+│   ├── phase2_unsupervised/    # Phase 2 - packet-level anomaly detection (WIP)
+│   └── phase3_supervised/      # Phase 3 - flow-level classifier (WIP)
+├── notebooks/           # profiling + preprocessing verification
 ├── results/             # figures, metrics, confusion matrices
 └── report/              # written report + demo video link
 ```
+
+Note: the dataset itself is **not** in the repo. It lives in `~/ece597-data`
+(outside the repo, so it's never committed or cloud-synced). See "Running" below.
 
 ## Setup
 
@@ -62,10 +61,32 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Data
+## Running (Phase 0 + Phase 1)
 
-Dataset files are **not** in this repo (too large). See `data/README.md` for the
-download link and which files to grab. Store the data in a shared team drive.
+**One-click:** run `src/phase1_sampling/run0_1.py` (press Run in your editor, or
+`python run0_1.py` from that folder). It runs, in order and stopping on any error:
+download → sample (Task 1.1) → preprocess (Task 1.2) → verify.
+
+First-time setup:
+
+```bash
+source .venv/bin/activate                 # activate your venv
+cp .env.example .env                       # then edit .env and paste your CIC cookie
+cd src/phase1_sampling
+python run0_1.py                           # full pipeline
+```
+
+Handy flags: `--skip-download` (data already fetched), `--seed 42` (reproducible
+sampling), `--no-verify`.
+
+## Data & the .env file
+
+The dataset is **not** committed (too large). It downloads to `~/ece597-data`
+by default; override by setting `ECE597_DATA` in your `.env`. The CIC portal needs
+a login token — copy your browser cookie into `.env` as `CIC_COOKIE=Token=...`
+(the real `.env` is git-ignored; `.env.example` shows the format). Cookies expire,
+so refresh it if downloads start returning the registration form. See
+`data/README.md` for which files to grab.
 
 ## Git workflow
 

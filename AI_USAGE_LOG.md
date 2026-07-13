@@ -8,3 +8,4 @@ reconstruct later. Each member is responsible for their own rows.
 | ---------- | ---------------------- | --------------- | ---------------------------------------- | ------------------------------------------------------- |
 | 2026-06-30 | (example)              | ChatGPT         | Drafted the sampling function skeleton   | Ran on sample data, checked row counts + ratios by hand |
 | 2026-06-30 | Irai Kumaran Sivanesan | Claude - Sonnet | Formating readme.md and requirements.txt | Mannually check each line changed as per required       |
+| 2026-07-13 | Irai Kumaran Sivanesan | Claude - Sonnet | Learned how to keep the CIC session cookie apart from the code | Confirmed the token is gone from tracked source, `.env` is git-ignored, and the scripts still load the cookie correctly |

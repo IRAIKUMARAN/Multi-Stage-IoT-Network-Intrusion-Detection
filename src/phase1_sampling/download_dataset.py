@@ -12,7 +12,8 @@ HOW TO GET YOUR COOKIE (Chrome, ~10 seconds):
      and make sure the folder listing loads.
   2. Press F12 -> Network tab -> refresh the page -> click the 'browse.php' row.
   3. Under Request Headers, copy the full value of 'Cookie:'.
-  4. Paste it into COOKIE below (keep the quotes).
+  4. Put it in the repo-root .env file as:  CIC_COOKIE=Token=xxxxxxxx
+     (.env is git-ignored, so your token never gets committed. See .env.example.)
 
 USAGE:
   python download_dataset.py --list              # dry run: show full file tree
@@ -31,13 +32,13 @@ from urllib.parse import urljoin, unquote
 import requests
 from bs4 import BeautifulSoup
 
+# Single source of truth: config loads the .env and resolves the data location
+# (~/ece597-data by default, or ECE597_DATA if set). COOKIE comes from .env too.
+from config import RAW as DATA_ROOT, COOKIE
+
 # ============================= CONFIG =======================================
 BASE = "https://cicresearch.ca/IOTDataset/CIC-IoT-IDAD-Dataset-2024/"
 START = BASE + "browse.php?p="
-
-COOKIE = "Token=375songupsu2ptuh8s5ac0fk2i"          # <-- from Chrome DevTools (step above)
-
-DATA_ROOT = Path(r"C:\ece597-data\raw")    # local, non-OneDrive storage
 
 # Which files the PROJECT actually needs. A file is kept if its lowercased
 # path matches at least one INCLUDE pattern and no EXCLUDE pattern.
@@ -152,21 +153,6 @@ def download(url, dest: Path, max_retries=5):
             time.sleep(wait)
 
     raise RuntimeError(f"Failed after {max_retries} retries: {dest.name}")
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists() and dest.stat().st_size > 0:
-        print(f"  skip (exists): {dest.name}")
-        return
-    with session.get(url, stream=True, timeout=120) as r:
-        r.raise_for_status()
-        total = int(r.headers.get("content-length", 0))
-        done = 0
-        with open(dest, "wb") as f:
-            for chunk in r.iter_content(chunk_size=1 << 20):   # 1 MB
-                f.write(chunk)
-                done += len(chunk)
-                if total:
-                    print(f"\r  {dest.name}: {done/total:6.1%}", end="")
-        print(f"\r  {dest.name}: done ({done/1e6:.1f} MB)      ")
 
 
 if __name__ == "__main__":
@@ -176,8 +162,9 @@ if __name__ == "__main__":
     ap.add_argument("--all", action="store_true", help="ignore filters, take everything")
     args = ap.parse_args()
 
-    if COOKIE.startswith("PASTE"):
-        sys.exit("Edit COOKIE at the top of this file first (see header).")
+    if not COOKIE:
+        sys.exit("No CIC_COOKIE found. Create a .env file at the repo root with "
+                 "CIC_COOKIE=Token=xxxx (see .env.example and the header above).")
 
     print("Crawling portal ... (this takes a minute)\n")
     files = list(crawl(START))
