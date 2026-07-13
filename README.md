@@ -42,8 +42,16 @@ DNS Spoofing, XSS, Brute Force** — in two stages:
 │   │   ├── generate_dataset.py # Task 1.1 - sampling function
 │   │   ├── preprocess.py       # Task 1.2 - preprocessing pipeline
 │   │   └── run0_1.py           # ONE-CLICK runner: Phase 0 + Phase 1
-│   ├── phase2_unsupervised/    # Phase 2 - packet-level anomaly detection (WIP)
-│   └── phase3_supervised/      # Phase 3 - flow-level classifier (WIP)
+│   ├── phase2_unsupervised/
+│   │   └── phase2_unsupervised.py  # Phase 2 - packet-level anomaly detection
+│   └── phase3_supervised/
+│       ├── build_flow_dataset.py   # Task 3.2 - build the flow dataset
+│       ├── preprocess_flow.py      # clean the flow features
+│       ├── train_supervised.py     # Task 3.3 - supervised classifier
+│       ├── flow_anomaly.py         # Task 3.1 + novelty experiment
+│       ├── recheck_phase2_alerts.py# two-stage re-check (headline result)
+│       ├── run3.py                 # ONE-CLICK runner: all of Phase 3
+│       └── analysis.txt            # full Phase 3 process write-up
 ├── notebooks/           # profiling + preprocessing verification
 ├── results/             # figures, metrics, confusion matrices
 └── report/              # written report + demo video link
@@ -117,6 +125,34 @@ the folder is created automatically on first run (override the location by setti
 your `.env`). Outputs land in `~/ece597-data/samples/`: `packet_sample.csv`,
 `packet_preprocessed.npz` (input for Phase 2), and `packet_bookkeeping.csv` (for Phase 3 flow
 matching). See `data/README.md` for which files are fetched.
+
+## Running Phase 2 (unsupervised, packet-level)
+
+After Phase 1 has produced `packet_preprocessed.npz`:
+
+```bash
+cd src/phase2_unsupervised
+python phase2_unsupervised.py
+```
+
+Outputs to `results/`: `phase2_metrics.json`, `phase2_confusion_matrix.png`,
+`phase2_roc.png`, and `flagged_packet_ids.csv` (the alerts handed to Phase 3).
+
+## Running Phase 3 (supervised, flow-level)
+
+Needs the data in `~/ece597-data` and Phase 2's `results/flagged_packet_ids.csv`.
+One command runs the whole stage:
+
+```bash
+cd src/phase3_supervised
+python run3.py     # build flow dataset → preprocess → train → 3.1 → re-check
+```
+
+Outputs to `results/`: `phase3_metrics.json` (classifier scores),
+`phase3_recheck.json` (the two-stage false-positive-reduction headline),
+`phase3_operating_curve.json/.png` (the trade-off curve), `phase3_anomaly.json`
+(Task 3.1), plus confusion-matrix and ROC plots. See `analysis.txt` in the
+Phase 3 folder for the full write-up of what each step does and why.
 
 ## Git workflow
 

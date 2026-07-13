@@ -3,6 +3,52 @@
 ========================================================================
 
 
+2026-07-13  |  Phase 3 implemented (supervised stage + two-stage re-check)
+------------------------------------------------------------------------
+Added src/phase3_supervised/: build_flow_dataset.py (Task 3.2),
+preprocess_flow.py, train_supervised.py (Task 3.3), flow_anomaly.py (Task 3.1
++ novelty), recheck_phase2_alerts.py, and run3.py (one-click runner).
+Code kept deliberately simple/linear for the demo. seed=42 throughout.
+Improvements this round: direction-independent alert matching, scaler fit on the
+training split only (no leakage), F1-optimal Phase 3 threshold, and an operating
+curve that auto-selects the two-stage operating point.
+
+SUPERVISED CLASSIFIER (Task 3.3, held-out test set, F1-optimal threshold 0.68)
+  - Model chosen by 5-fold CV: RandomForest (CV F1 0.52; HistGB 0.36; LogReg 0.17)
+  - AUC 0.93, F1 0.66, precision 0.76, recall 0.58
+  - Per-attack (packet level, Phase 2): DDoS/DoS easy, DNS/XSS/Brute hard - the
+    same volumetric-vs-stealthy split holds at flow level.
+
+TWO-STAGE RE-CHECK (headline; operating point auto-picked from the curve)
+  - Alert match rate 96.2% (direction-independent key; was 61% before the fix)
+  - Operating point = most FP reduction while keeping >= 90% of attacks
+    -> threshold 0.10
+  - False positives 26,039 -> 1,354  =  94.8% reduction
+  - Attack retention 92.8%  (kept 903 of 973)
+  - Alert-stream precision: ~3.6% (Phase 2 alone) -> ~40% (after Phase 3), while
+    keeping 93% of the real attacks. Slide up the curve for more precision at the
+    cost of retention (e.g. threshold 0.5 -> 99.5% FP reduction, 72% retention).
+
+TASK 3.1 (flow vs packet, FAIR same-method comparison)
+  - Isolation Forest on flows   AUC = 0.687
+  - Isolation Forest on packets  AUC = 0.673  (Phase 2)  -> flows slightly better
+  - Autoencoder on packets       AUC = 0.846  (best single detector overall)
+
+NOVELTY
+  - Main novelty = the two-stage HYBRID (recall-first anomaly detection ->
+    supervised refinement) PLUS the operating-curve analysis that maps the full
+    FP-reduction vs attack-retention trade-off and selects the operating point.
+    Plot: results/phase3_operating_curve.png.
+  - Secondary experiment: adding the flow anomaly score as a feature gives only a
+    tiny change (F1 0.6123 -> 0.6138) - reported honestly (the RandomForest
+    already captures most of that signal).
+
+OPEN / NEXT
+  - DNS/XSS/Brute are weak at flow level vs DDoS/DoS (volumetric easy, stealthy
+    hard) - a key report discussion point.
+  - Final report + demo video.
+
+
 2026-07-13  |  Phase 2 corrections
 ------------------------------------------------------------------------
 Applied review fixes to src/phase2_unsupervised/phase2_unsupervised.py and

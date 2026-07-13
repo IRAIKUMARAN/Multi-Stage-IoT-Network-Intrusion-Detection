@@ -1,0 +1,41 @@
+{
+  "model": "RandomForest",
+  "cv_f1": {
+    "RandomForest": 0.5179691984692993,
+    "HistGradientBoosting": 0.355811568754219,
+    "LogisticRegression": 0.17161344923052074
+  },
+  "threshold": 0.6828040854315215,
+  "AUC": 0.9322504171632895,
+  "precision": 0.7608695652173914,
+  "recall": 0.5840286054827175,
+  "f1": 0.6608226567768037,
+  "FPR": 0.00385,
+  "FNR": 0.4159713945172825,
+  "tn": 39846,
+  "fp": 154,
+  "fn": 349,
+  "tp": 490,
+  "per_attack_detection": {
+    "DDoS-HTTP_Flood": {
+      "n": 178,
+      "detection_rate": 0.9606741573033708
+    },
+    "DoS-HTTP_Flood": {
+      "n": 166,
+      "detection_rate": 0.7891566265060241
+    },
+    "DNS_Spoofing": {
+      "n": 160,
+      "detection_rate": 0.35625
+    },
+    "XSS": {
+      "n": 188,
+      "detection_rate": 0.4308510638297872
+    },
+    "Brute_Force": {
+      "n": 147,
+      "detection_rate": 0.3401360544217687
+    }
+  }
+}

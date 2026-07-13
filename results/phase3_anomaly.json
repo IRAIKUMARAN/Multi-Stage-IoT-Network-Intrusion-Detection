@@ -1,0 +1,17 @@
+{
+  "flow_IsolationForest_AUC": 0.6865,
+  "packet_IsolationForest_AUC": 0.6730308827886049,
+  "packet_autoencoder_AUC": 0.8460090415309562,
+  "supervised_without_anomaly": {
+    "f1": 0.6123,
+    "precision": 0.5984,
+    "recall": 0.6269,
+    "AUC": 0.9222
+  },
+  "supervised_with_anomaly": {
+    "f1": 0.6138,
+    "precision": 0.6011,
+    "recall": 0.6269,
+    "AUC": 0.9208
+  }
+}

@@ -1,0 +1,97 @@
+[
+  {
+    "threshold": 0.05,
+    "fp_reduction_pct": 91.5,
+    "attack_retention_pct": 97.0
+  },
+  {
+    "threshold": 0.1,
+    "fp_reduction_pct": 94.8,
+    "attack_retention_pct": 92.8
+  },
+  {
+    "threshold": 0.15,
+    "fp_reduction_pct": 97.3,
+    "attack_retention_pct": 89.7
+  },
+  {
+    "threshold": 0.2,
+    "fp_reduction_pct": 98.8,
+    "attack_retention_pct": 88.3
+  },
+  {
+    "threshold": 0.25,
+    "fp_reduction_pct": 99.2,
+    "attack_retention_pct": 84.3
+  },
+  {
+    "threshold": 0.3,
+    "fp_reduction_pct": 99.3,
+    "attack_retention_pct": 81.3
+  },
+  {
+    "threshold": 0.35,
+    "fp_reduction_pct": 99.4,
+    "attack_retention_pct": 78.4
+  },
+  {
+    "threshold": 0.4,
+    "fp_reduction_pct": 99.4,
+    "attack_retention_pct": 75.1
+  },
+  {
+    "threshold": 0.45,
+    "fp_reduction_pct": 99.5,
+    "attack_retention_pct": 73.9
+  },
+  {
+    "threshold": 0.5,
+    "fp_reduction_pct": 99.5,
+    "attack_retention_pct": 72.6
+  },
+  {
+    "threshold": 0.55,
+    "fp_reduction_pct": 99.5,
+    "attack_retention_pct": 70.6
+  },
+  {
+    "threshold": 0.6,
+    "fp_reduction_pct": 99.6,
+    "attack_retention_pct": 67.4
+  },
+  {
+    "threshold": 0.65,
+    "fp_reduction_pct": 99.6,
+    "attack_retention_pct": 65.8
+  },
+  {
+    "threshold": 0.7,
+    "fp_reduction_pct": 99.6,
+    "attack_retention_pct": 63.2
+  },
+  {
+    "threshold": 0.75,
+    "fp_reduction_pct": 99.6,
+    "attack_retention_pct": 60.5
+  },
+  {
+    "threshold": 0.8,
+    "fp_reduction_pct": 99.6,
+    "attack_retention_pct": 57.8
+  },
+  {
+    "threshold": 0.85,
+    "fp_reduction_pct": 100.0,
+    "attack_retention_pct": 54.2
+  },
+  {
+    "threshold": 0.9,
+    "fp_reduction_pct": 100.0,
+    "attack_retention_pct": 49.4
+  },
+  {
+    "threshold": 0.95,
+    "fp_reduction_pct": 100.0,
+    "attack_retention_pct": 41.4
+  }
+]

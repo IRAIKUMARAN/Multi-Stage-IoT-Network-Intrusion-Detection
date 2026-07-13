@@ -1,0 +1,136 @@
+========================================================================
+ ECE 597 - GROUP 7 - PHASE 3 ANALYSIS
+ Supervised (signature-based) stage + two-stage re-check
+========================================================================
+
+
+1. GOAL
+------------------------------------------------------------------------
+Phase 2 (unsupervised, packet-level) is tuned for RECALL: it flags almost
+every attack but also a huge number of benign packets (~28,000 alerts, of
+which ~27,000 are false positives). Phase 3's job is to RE-CHECK those alerts
+using richer flow-level features and a supervised model, removing the false
+positives while keeping the real attacks.
+
+Intuition: Phase 2 is a jumpy metal detector; Phase 3 is the careful bag check
+that clears the false beeps. The detector must beep on everything suspicious
+(high recall) because the bag check can only remove false alarms, never recover
+an attack the detector missed.
+
+
+2. THE PIPELINE (files, in run order)
+------------------------------------------------------------------------
+run3.py runs these in order and stops on any failure:
+
+build_flow_dataset.py   (Task 3.2)
+  - FLOW_FILES: maps each class (Benign + 5 attacks) to its flow file(s).
+  - agg_rule(columns): how to merge a flow's 2-minute segments into ONE row -
+      sum totals/counts/duration, keep max/min extremes, average the rest.
+  - main: load each file, label it (the raw Label is "NeedManualLabel"),
+      group by Flow ID to merge segments, sample ~200k benign + ~5k attacks
+      (even across the 5 types), shuffle, save flow_sample.csv. seed=42.
+
+preprocess_flow.py
+  - Drop identifier columns (Flow ID, IPs, ports, timestamp) so the model can
+      not memorise hosts (leakage). Protocol is KEPT (real feature).
+  - Coerce to numeric, replace inf with NaN, median-impute.
+  - Save flow_preprocessed.npz (features + labels + medians) and a bookkeeping
+      file of IPs/ports for matching Phase 2 alerts later.
+  - NOTE: scaling is NOT done here (moved to training - see change #3 below).
+
+train_supervised.py     (Task 3.3)
+  - Split dev/test (80/20, stratified). Fit the scaler on DEV ONLY.
+  - Compare 3 models with 5-fold cross-validation: RandomForest,
+      HistGradientBoosting, LogisticRegression. class_weight="balanced"
+      handles the 2% attack rate. RandomForest wins.
+  - Tune the decision threshold to the F1-optimal (balanced) point on a
+      validation slice. Refit the winner on all of dev, score on the test set.
+  - Save flow_model.joblib, flow_preprocessor.joblib (scaler+medians+threshold),
+      phase3_metrics.json, confusion-matrix and ROC plots.
+
+flow_anomaly.py         (Task 3.1 + novelty experiment)
+  - Run Isolation Forest on the flow features (no labels in training) and
+      compare its AUC to the SAME method on packets (from Phase 2) - fair test.
+  - Test adding the anomaly score as an extra feature to the supervised model
+      (with vs without). Save phase3_anomaly.json.
+
+recheck_phase2_alerts.py  (headline + novelty)
+  - flow_key(): builds a DIRECTION-INDEPENDENT match key (sorts the two
+      endpoints) so A->B and B->A match the same flow.
+  - Load Phase 2's flagged_packet_ids.csv, find each flagged packet's flow in
+      the flow files, merge segments the same way as training, predict.
+  - Sweep the threshold to build the two-stage operating curve, then auto-pick
+      the operating point (most false-positive reduction while keeping >= 90%
+      of attacks). Save phase3_recheck.json + phase3_operating_curve.json/.png.
+
+
+3. WHAT WE DID FIRST, WHAT HAPPENED, WHY WE CHANGED IT
+------------------------------------------------------------------------
+v1  Built the full pipeline and ran it.
+    Result: 99.4% false-positive reduction, BUT only 61% of alerts matched a
+    flow, and only 72% of attacks were retained. Two problems surfaced.
+
+Problem 1 - low match rate (61%).
+    Cause: the match key was direction-dependent. A flow filed as A->B did not
+    match an alert recorded as B->A (same connection, opposite direction).
+    Fix: direction-independent key (sort the two endpoints before matching).
+    Result: match rate 61% -> 96%.
+
+Problem 2 - low attack retention (72%).
+    Cause: the classifier used the default 0.5 decision threshold, dropping 28%
+    of real attacks. Bad for a cascade (Phase 3 can not recover them).
+    Fix attempt A (overshot): target 90% recall -> threshold fell to 0.017.
+        Kept 98% of attacks but let 3,765 false positives back through and
+        precision crashed (~20%). Too lenient.
+    Fix (final): the OPERATING CURVE. Sweep every threshold, plot the trade-off
+        (false-positive reduction vs attack retention), and auto-pick the knee:
+        threshold 0.10 -> 94.8% FP reduction AND 92.8% retention. Also switched
+        the classifier's own threshold to F1-optimal (balanced) so its
+        standalone metrics are sensible.
+
+Problem 3 - minor data leakage.
+    Cause: the scaler was fit on ALL data (including the test set).
+    Fix: fit the scaler on the training split only, then apply to test.
+
+Novelty - why it changed.
+    First idea: feed the flow anomaly score as a feature -> barely changed F1
+        (0.6123 -> 0.6138); the RandomForest already captures that signal.
+    Rejected idea: fuse the packet autoencoder score -> the packet and flow
+        samples are independent draws, so most flows have no packet score
+        (mostly-missing feature). Does not fit.
+    Final novelty: the two-stage HYBRID itself (recall-first anomaly detection
+        -> supervised refinement) PLUS the operating-curve analysis that maps
+        the full trade-off and selects the operating point. Most teams report
+        one number at one threshold; we characterise the whole system.
+
+
+4. FINAL RESULTS (seed=42)
+------------------------------------------------------------------------
+Supervised classifier (test set, F1-optimal threshold ~0.68):
+    RandomForest chosen by CV (CV F1 0.52 vs HistGB 0.36, LogReg 0.17)
+    AUC 0.93, precision 0.76, recall 0.58, F1 0.66
+
+Two-stage re-check (operating point = threshold 0.10):
+    Alert match rate       96.2%
+    False positives        26,039 -> 1,354   =  94.8% reduction
+    Attack retention       92.8%  (kept 903 of 973)
+    Alert-stream precision ~3.6% (Phase 2 alone) -> ~40% (after Phase 3)
+
+Task 3.1 (fair same-method comparison):
+    Isolation Forest on flows   AUC 0.687
+    Isolation Forest on packets AUC 0.673   -> flow features slightly better
+    Autoencoder on packets      AUC 0.846   -> best single detector overall
+
+
+5. KNOWN LIMITATIONS (report discussion points)
+------------------------------------------------------------------------
+- Volumetric attacks (DDoS, DoS) are easy at flow level; stealthy attacks
+  (DNS Spoofing, XSS, Brute Force) are hard because their flows resemble benign
+  traffic. This is the main cause of imperfect retention.
+- The operating point trades precision for retention; a higher threshold gives
+  more precision but keeps fewer attacks (see the operating curve). For an IDS,
+  prioritising retention is the reasonable choice.
+- Median imputation uses global medians (negligible; the scaler leakage - the
+  larger issue - is fixed).
+
+========================================================================
