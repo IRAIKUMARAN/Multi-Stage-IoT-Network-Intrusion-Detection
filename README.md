@@ -52,41 +52,71 @@ DNS Spoofing, XSS, Brute Force** — in two stages:
 Note: the dataset itself is **not** in the repo. It lives in `~/ece597-data`
 (outside the repo, so it's never committed or cloud-synced). See "Running" below.
 
-## Setup
+## How to run (Phase 0 + Phase 1)
+
+Runs the full pipeline: download → sample → preprocess → verify.
+Works on macOS and Windows. Do the steps in order.
+
+### Step 1 — Get the latest code
 
 ```bash
-# Python 3.11 recommended
+git pull
+```
+
+### Step 2 — Create & activate a virtual environment
+
+```bash
 python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 ```
 
-## Running (Phase 0 + Phase 1)
+You'll see `(.venv)` at the start of your prompt when it's active.
 
-**One-click:** run `src/phase1_sampling/run0_1.py` (press Run in your editor, or
-`python run0_1.py` from that folder). It runs, in order and stopping on any error:
-download → sample (Task 1.1) → preprocess (Task 1.2) → verify.
-
-First-time setup:
+### Step 3 — Install dependencies
 
 ```bash
-source .venv/bin/activate                 # activate your venv
-cp .env.example .env                       # then edit .env and paste your CIC cookie
-cd src/phase1_sampling
-python run0_1.py                           # full pipeline
+python -m pip install -r requirements.txt
 ```
 
-Handy flags: `--skip-download` (data already fetched), `--seed 42` (reproducible
-sampling), `--no-verify`.
+### Step 4 — Get your CIC cookie and put it in `.env`
 
-## Data & the .env file
+The dataset portal needs you to be logged in, so each person uses their **own** login token.
 
-The dataset is **not** committed (too large). It downloads to `~/ece597-data`
-by default; override by setting `ECE597_DATA` in your `.env`. The CIC portal needs
-a login token — copy your browser cookie into `.env` as `CIC_COOKIE=Token=...`
-(the real `.env` is git-ignored; `.env.example` shows the format). Cookies expire,
-so refresh it if downloads start returning the registration form. See
-`data/README.md` for which files to grab.
+1. In Chrome, sign in and open the CIC dataset browse page (`cicresearch.ca/IOTDataset/...`); make sure the file list loads.
+2. Press **F12** → **Network** tab.
+3. **Refresh** the page, then click the row named **`browse.php`**.
+4. Under **Request Headers**, find **`Cookie:`** and copy its full value (looks like `Token=xxxxxxxx`).
+5. Copy the template and paste your token in:
+
+```bash
+cp .env.example .env               # then edit .env:  CIC_COOKIE=Token=xxxxxxxx
+```
+
+> ⚠️ Never commit `.env` — it's git-ignored on purpose. Cookies expire, so if a download later
+> returns a "registration form", just redo Step 4 with a fresh cookie.
+
+### Step 5 — Run the pipeline (one command)
+
+```bash
+cd src/phase1_sampling
+python run0_1.py                   # download → sample → preprocess → verify
+```
+
+Handy flags:
+
+```bash
+python run0_1.py --skip-download   # data already downloaded; just re-sample + preprocess
+python run0_1.py --seed 42         # reproducible sample (same mix every run)
+python run0_1.py --no-verify       # skip the verification step
+```
+
+### Notes
+
+The dataset (~5 GB) downloads to `~/ece597-data` — **outside** the repo, so it's never committed;
+the folder is created automatically on first run (override the location by setting `ECE597_DATA` in
+your `.env`). Outputs land in `~/ece597-data/samples/`: `packet_sample.csv`,
+`packet_preprocessed.npz` (input for Phase 2), and `packet_bookkeeping.csv` (for Phase 3 flow
+matching). See `data/README.md` for which files are fetched.
 
 ## Git workflow
 
