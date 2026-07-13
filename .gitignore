@@ -28,3 +28,18 @@ env/
 .DS_Store
 .vscode/
 .idea/
+
+# data never goes to git
+data/
+*.csv
+C:/ece597-data/
+
+# python
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# secrets
+*cookie*
+.env
