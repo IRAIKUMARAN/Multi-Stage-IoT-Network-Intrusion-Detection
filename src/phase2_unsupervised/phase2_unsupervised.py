@@ -15,7 +15,7 @@ from pathlib import Path
 # Phase 2 is stage 1 of a cascade. Stage 2 (Phase 3) can only REMOVE false
 # positives, never recover a missed attack, so we bias Phase 2 toward RECALL.
 # Lower this (e.g. 0.80) if Phase 3 gets overwhelmed by too many false alarms.
-RECALL_TARGET = 0.85
+RECALL_TARGET = 0.95
 
 # SECTION 1 - LOAD DATA
 # Load the preprocessed feature matrix (already scaled). Labels are read too, but ONLY for evaluation / threshold tuning - the models never train on them.
@@ -117,6 +117,25 @@ thr_recall = thrs[ok].max() if ok.any() else thr_f1
 THR         = thr_recall
 ae_pred_te  = (err_te > THR).astype(int)
 print(f"\nchosen AE threshold={THR:.4g}  (recall-first; F1-optimal was {f1s[best]:.3f})")
+
+# SECTION 7b - PHASE 2 SWEET-SPOT CURVE: recall vs false-positive-rate across cutoffs.
+# The "sweet spot" is where recall is high but the false-alarm rate is still tolerable
+# for Phase 3. Computed on validation so it does not peek at the test set.
+import json as _json
+from sklearn.metrics import confusion_matrix as _cm
+_curve = []
+for q in np.linspace(0.50, 0.999, 25):
+    t = float(np.quantile(err_va, q))
+    p = (err_va > t).astype(int)
+    tn, fp, fn, tp = _cm(yva, p).ravel()
+    _curve.append({"threshold": round(t, 5),
+                   "recall": round(tp / (tp + fn), 3),
+                   "FPR": round(fp / (fp + tn), 3),
+                   "precision": round(tp / (tp + fp + 1e-9), 3)})
+_P2 = Path(__file__).resolve().parents[2] / "results"
+_P2.mkdir(exist_ok=True)
+(_P2 / "phase2_operating_curve.json").write_text(_json.dumps(_curve, indent=2))
+print("saved results/phase2_operating_curve.json (recall vs false-alarm trade-off)")
 
 # SECTION 8 - EVALUATE ALL METHODS ON TEST
 from sklearn.metrics import (precision_score, recall_score, f1_score, confusion_matrix)
