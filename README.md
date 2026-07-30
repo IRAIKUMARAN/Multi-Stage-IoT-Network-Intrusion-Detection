@@ -11,7 +11,7 @@ supervised by Dr. Ardeshir Shojaeinasab & Riham AlTawy.
 | Apoorva Rampal             | @apoorvarampal123       |
 | Arvind Sharma              | @arvindxsharma          |
 | Irai Kumaran Sivanesan     | @iraikumaranUvic        |
-| Manivannan Usha Sundaresan | mvannan@uvic.ca         |
+| Manivannan Usha Sundaresan | @Concorde-Supernovae    |
 | Muhammad Aarij             | @aarij13406             |
 | Naluraj Babu               | @NALLURAJ               |
 | Vinay Kumar Devarakonda    | @VinayKumar-DataScience |
