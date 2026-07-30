@@ -1,0 +1,35 @@
+{
+  "timing": {
+    "note": "run with --time to measure wall-clock time"
+  },
+  "combined_two_stage_system": {
+    "tn": 54404,
+    "fp": 5510,
+    "fn": 143,
+    "tp": 1103,
+    "precision": 0.1668,
+    "recall": 0.8852,
+    "f1": 0.2807,
+    "accuracy": 0.9076,
+    "false_positive_reduction_vs_phase2": 0.8813
+  },
+  "significance": {
+    "b": 40904,
+    "c": 89,
+    "p_value": 0.0,
+    "significant": true,
+    "interpretation": "significant improvement over Phase 2 alone"
+  },
+  "phase2_alone": {
+    "precision": 0.0250388606478175,
+    "recall": 0.956661316211878,
+    "f1": 0.04880045852779825,
+    "accuracy": 0.2402
+  },
+  "phase3_alone": {
+    "precision": 0.7608695652173914,
+    "recall": 0.5840286054827175,
+    "f1": 0.6608226567768037,
+    "accuracy": 0.9877
+  }
+}
