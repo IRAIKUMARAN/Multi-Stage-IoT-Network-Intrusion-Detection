@@ -42,6 +42,10 @@ print("dropped leaky cols:", int((~mask).sum()))
 print("X:", X.shape, "| attack rate:", round(y.mean(), 4))
 
 # SECTION 2 - TRAIN / VAL / TEST SPLIT
+# Here we took the cleaned and pre-processed data from Phase - 1 and did the initial split of 70:30 (70% - Training and 30% validation set).
+# This 70% training set further split into 80:20 (80% - inner train and 20% inner validation set)
+# 30% test is used for blind test to be used at very end to avoid any data leakage
+# the 20% inner validatiion set is used for hyperparameter tuning.
 from sklearn.model_selection import train_test_split
 idx = np.arange(len(X))
 itr, ite = train_test_split(idx, test_size=0.30, random_state=42, stratify=y)
