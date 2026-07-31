@@ -15,7 +15,7 @@ from pathlib import Path
 # Phase 2 is stage 1 of a cascade. Stage 2 (Phase 3) can only REMOVE false
 # positives, never recover a missed attack, so we bias Phase 2 toward RECALL.
 # Lower this (e.g. 0.80) if Phase 3 gets overwhelmed by too many false alarms.
-RECALL_TARGET = 0.95
+RECALL_TARGET = 0.85
 
 # SECTION 1 - LOAD DATA
 # Load the preprocessed feature matrix (already scaled). Labels are read too, but ONLY for evaluation / threshold tuning - the models never train on them.
