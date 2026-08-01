@@ -1,0 +1,42 @@
+{
+  "selection": "thresholds tuned on validation, reported on test",
+  "phase2_alone": {
+    "precision": 0.3485,
+    "recall": 0.4679,
+    "f1": 0.3995,
+    "accuracy": 0.9713,
+    "tn": 58824,
+    "fp": 1090,
+    "fn": 663,
+    "tp": 583,
+    "alerts": 1673,
+    "t2": 1.8705596233076351
+  },
+  "phase3_alone": {
+    "precision": 0.7342,
+    "recall": 0.6605,
+    "f1": 0.6954,
+    "accuracy": 0.9882,
+    "tn": 59616,
+    "fp": 298,
+    "fn": 423,
+    "tp": 823,
+    "alerts": 1121,
+    "t3": 0.35
+  },
+  "cascade_best": {
+    "precision": 0.7828,
+    "recall": 0.6709,
+    "f1": 0.7226,
+    "accuracy": 0.9895,
+    "tn": 59682,
+    "fp": 232,
+    "fn": 410,
+    "tp": 836,
+    "alerts": 1068,
+    "t2": 0.07950904467622488,
+    "t3": 0.2
+  },
+  "winner": "Cascade (2 then 3)",
+  "match_rate_test": 0.9461
+}

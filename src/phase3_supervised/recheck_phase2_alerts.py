@@ -87,15 +87,26 @@ if __name__ == "__main__":
                       "attack_retention_pct": round(100 * tp_a / tp_before, 1) if tp_before else None})
     (RESULTS / "phase3_operating_curve.json").write_text(json.dumps(curve, indent=2))
 
-    # 5. pick the operating point: most false-positive reduction while keeping >= 90% of attacks
+    # 5. operating point: use the validation-tuned threshold when Phase 4 has produced
+    #    one, otherwise fall back to "most FP reduction while keeping >= 90% of attacks".
     RETENTION_FLOOR = 90.0
-    viable = [c for c in curve if c["attack_retention_pct"] and c["attack_retention_pct"] >= RETENTION_FLOOR]
-    chosen = max(viable, key=lambda c: c["fp_reduction_pct"]) if viable \
-        else max(curve, key=lambda c: c["attack_retention_pct"])
+    tuned = RESULTS / "operating_point.json"
+    if tuned.exists():
+        t = json.loads(tuned.read_text())["phase3_threshold"]
+        chosen = min(curve, key=lambda c: abs(c["threshold"] - t))
+        rule = "tuned on validation by the cascade sweep"
+    else:
+        viable = [c for c in curve
+                  if c["attack_retention_pct"] and c["attack_retention_pct"] >= RETENTION_FLOOR]
+        chosen = max(viable, key=lambda c: c["fp_reduction_pct"]) if viable \
+            else max(curve, key=lambda c: c["attack_retention_pct"])
+        rule = f"retention >= {RETENTION_FLOOR}% (untuned fallback)"
+    print(f"operating point: {rule} -> threshold {chosen['threshold']}")
 
     op = m["proba"] >= chosen["threshold"]
     result = {
         "operating_threshold": chosen["threshold"],
+        "operating_point_rule": rule,
         "retention_floor_pct": RETENTION_FLOOR,
         "flagged_total": int(len(flagged)),
         "matched_to_flow": int(len(m)),
