@@ -19,12 +19,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # no display in this environment, just save figures to disk
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix
 
+# reuse the sampling config from phase 1 instead of duplicating paths here
 sys.path.append(str(Path(__file__).resolve().parents[1] / "phase1_sampling"))
 from config import SAMPLES as DATA
 
@@ -33,18 +34,21 @@ import scoring as sc
 import thresholds as th
 
 CASCADE_RECALL_TARGET = 0.85
-ARCHS = [(64, 16, 64), (128, 32, 128), (96, 24, 96)]
+ARCHS = [(64, 16, 64), (128, 32, 128), (96, 24, 96)] # autoencoder shapes to sweep
 ATTACKS = ["DDoS-HTTP_Flood", "DoS-HTTP_Flood", "DNS_Spoofing", "XSS", "Brute_Force"]
 RESULTS = Path(__file__).resolve().parents[2] / "results"
 SEED = 42
 
 
 def load_data():
+  """Load the preprocessed packet features + bookkeeping table and drop leaky cols."""
     d = np.load(DATA / "packet_preprocessed.npz", allow_pickle=True)
     X, feat = d["X"], d["feature_names"].astype(str)
     book = pd.read_csv(DATA / "packet_bookkeeping.csv")
     y_type = book["attack_type"].to_numpy()
 
+    # these two features basically leak the label (found during EDA), so they get
+    # dropped before anything is trained on them
     leaky = np.array([f == "port_class_dst" or
                       f.startswith("http_content_type=application/octet-stream")
                       for f in feat])
@@ -54,6 +58,7 @@ def load_data():
 
 
 def split(X, y):
+    """Stratified train/val/test split, 70/(0.2*70)/30 roughly, all keyed off SEED."""
     idx = np.arange(len(X))
     itr, ite = train_test_split(idx, test_size=0.30, random_state=SEED, stratify=y)
     itr, iva = train_test_split(itr, test_size=0.20, random_state=SEED, stratify=y[itr])
@@ -64,6 +69,7 @@ def build_detectors(Xtr, Xva, Xte, yva):
     """Return {name: (val_score, test_score)} for every detector. No labels in training."""
     scorer = lambda s: roc_auc_score(yva, s)
 
+    # pick the AE architecture using val AUC only, then train it for real
     arch, arch_auc, sweep = det.sweep_autoencoder(Xtr, Xva, scorer, ARCHS)
     for auc, h in sweep:
         print(f"  AE {str(h):16s} val AUC={auc:.3f}")
@@ -72,6 +78,7 @@ def build_detectors(Xtr, Xva, Xte, yva):
     ae = det.train_autoencoder(Xtr, arch, max_iter=100)
     scale = sc.feature_error_scale(ae, Xtr)
 
+    # robust variant is trained separately (different loss), gets its own scale
     rae = det.train_robust_autoencoder(Xtr, arch, max_iter=100)
     rscale = sc.feature_error_scale(rae, Xtr)
 
@@ -87,6 +94,10 @@ def build_detectors(Xtr, Xva, Xte, yva):
         "PCA":           (pca_va, pca_te),
         "IsolationForest": (if_va, if_te),
     }
+
+    # fuse the three strongest, independent detectors; weight each by how much
+    # better than random it actually is on validation (clip negatives to 0 so a
+    # detector that's worse than chance doesn't drag the fusion down)
     parts = ["AE_robust", "PCA", "IsolationForest"]
     w = [max(roc_auc_score(yva, out[p][0]) - 0.5, 0) for p in parts]
     print("fusion weights: " + ", ".join(f"{p}={x:.3f}" for p, x in zip(parts, w)))
@@ -103,8 +114,8 @@ def compare(scores, yva, yte):
     """
     table, val_f1 = {}, {}
     for name, (s_va, s_te) in scores.items():
-        thr, f1_va = th.f1_optimal(yva, s_va)
-        m = sc.evaluate(yte, (s_te > thr).astype(int), s_te)
+        thr, f1_va = th.f1_optimal(yva, s_va)   # threshold picked on val only
+        m = sc.evaluate(yte, (s_te > thr).astype(int), s_te)  # test metrics reported after
         m["threshold"] = thr
         m["val_f1"] = round(f1_va, 4)
         table[name] = m
@@ -113,6 +124,7 @@ def compare(scores, yva, yte):
 
 
 def plots(yte, pred, scores):
+    """Save the confusion matrix (standalone pick) and ROC comparison across detectors."""
     RESULTS.mkdir(exist_ok=True)
     plt.figure(figsize=(4, 3.5))
     sns.heatmap(confusion_matrix(yte, pred), annot=True, fmt="d", cmap="Blues",
@@ -125,7 +137,7 @@ def plots(yte, pred, scores):
     for name, (_, st) in scores.items():
         fpr, tpr, _ = roc_curve(yte, st)
         plt.plot(fpr, tpr, lw=1.6, label=f"{name} ({roc_auc_score(yte, st):.3f})")
-    plt.plot([0, 1], [0, 1], "--", color="gray", lw=1)
+    plt.plot([0, 1], [0, 1], "--", color="gray", lw=1)  # random-guess reference line
     plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
     plt.title("Phase 2 ROC - detector comparison")
     plt.legend(fontsize=7); plt.tight_layout()
@@ -133,6 +145,8 @@ def plots(yte, pred, scores):
 
 
 if __name__ == "__main__":
+    # lets rerun the whole pipeline with a different seed for a quick
+    # stability check without touching the code
     if "--seed" in sys.argv:
         SEED = int(sys.argv[sys.argv.index("--seed") + 1])
         det.SEED = SEED
@@ -155,6 +169,7 @@ if __name__ == "__main__":
         print(f"  {name:18s} {m['AUC']:>6.3f} {m['precision']:>7.3f} "
               f"{m['recall']:>7.3f} {m['f1']:>7.3f} {m['val_f1']:>7.3f}")
 
+    # selection happens on val F1 - test set is only for reporting, never for choosing
     best = max(val_f1, key=val_f1.get)          # selected on validation, never on test
     s_va, s_te = scores[best]
     print(f"\nbest standalone detector: {best} "
@@ -163,6 +178,8 @@ if __name__ == "__main__":
     thr_standalone = table[best]["threshold"]
     pred_standalone = (s_te > thr_standalone).astype(int)
 
+    # cascade threshold: use the tuned value from the cascade sweep if it exists,
+    # otherwise fall back to a plain recall-target threshold on validation
     tuned = RESULTS / "operating_point.json"
     if tuned.exists():
         thr_cascade = json.loads(tuned.read_text())["phase2_threshold"]
@@ -197,11 +214,14 @@ if __name__ == "__main__":
     metrics["seed"] = SEED
     RESULTS.mkdir(exist_ok=True)
     (RESULTS / "phase2_metrics.json").write_text(json.dumps(metrics, indent=2))
+    # keep a per-seed copy too, so re-running with --seed doesn't clobber the main run
     if SEED != 42:
         (RESULTS / f"phase2_metrics_seed{SEED}.json").write_text(json.dumps(metrics, indent=2))
     (RESULTS / "phase2_operating_curve.json").write_text(
         json.dumps(th.operating_curve(yva, s_va), indent=2))
 
+    # only the packets flagged at the cascade threshold get passed forward -
+    # this is literally the input Phase 3 will work with  
     book.iloc[ite][pred_cascade.astype(bool)].to_csv(
         RESULTS / "flagged_packet_ids.csv", index=False)
     print(f"\nflagged alerts handed to Phase 3: {int(pred_cascade.sum())}")
