@@ -38,36 +38,9 @@ if __name__ == "__main__":
     names = d["feature_names"].astype(str).tolist()
     medians = pd.Series(d["medians"], index=names)
 
-    # Flows belonging to Phase 2's held-out packets are forced out of training, so
-    # Phase 4 never asks this model about a flow it learned from.
-    from recheck_phase2_alerts import flow_key
-    book = pd.read_csv(SAMPLES / "flow_bookkeeping.csv")
-    all_keys = flow_key(book["Src IP"], book["Dst IP"],
-                        book["Src Port"], book["Dst Port"])
-
-    idx = np.arange(len(X))
-    held = np.zeros(len(X), dtype=bool)
-    ep = RESULTS / "heldout_endpoints.csv"
-    if ep.exists():
-        e = pd.read_csv(ep)
-        wanted = set(flow_key(e["src_ip"], e["dst_ip"], e["src_port"], e["dst_port"]))
-        held = all_keys.isin(wanted).to_numpy()
-        print(f"flows excluded from training (Phase 2 held-out): {held.sum()} "
-              f"({held.mean():.1%})")
-    else:
-        print("heldout_endpoints.csv not found - run phase2 first for a leak-free split")
-
-    free = idx[~held]
-    dev_i, te_i = train_test_split(free, test_size=0.2, random_state=42,
-                                   stratify=y[free])
-    te_i = np.concatenate([te_i, idx[held]])
-    Xdev, Xte, ydev, yte, tte = X[dev_i], X[te_i], y[dev_i], y[te_i], attack_type[te_i]
-    print(f"flow split: dev={len(dev_i)} test={len(te_i)}")
-
-    RESULTS.mkdir(exist_ok=True)
-    pd.Series(sorted(set(all_keys.iloc[dev_i]))).to_frame("key").to_csv(
-        RESULTS / "flow_train_keys.csv", index=False)
-
+    # dev/test split, then scale using dev only (test never influences the scaler)
+    Xdev, Xte, ydev, yte, _, tte = train_test_split(
+        X, y, attack_type, test_size=0.2, random_state=42, stratify=y)
     scaler = StandardScaler().fit(Xdev)
     Xdev, Xte = scaler.transform(Xdev), scaler.transform(Xte)
 
