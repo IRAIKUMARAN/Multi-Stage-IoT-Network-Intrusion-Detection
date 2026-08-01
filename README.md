@@ -43,15 +43,22 @@ DNS Spoofing, XSS, Brute Force** — in two stages:
 │   │   ├── preprocess.py       # Task 1.2 - preprocessing pipeline
 │   │   └── run0_1.py           # ONE-CLICK runner: Phase 0 + Phase 1
 │   ├── phase2_unsupervised/
+│   │   ├── detectors.py            # the unsupervised models (AE, robust AE, PCA, iForest, k-means)
+│   │   ├── scoring.py              # anomaly scoring: normalised error, rank fusion, metrics
+│   │   ├── thresholds.py           # operating-point selection (F1-optimal, recall, cost)
 │   │   └── phase2_unsupervised.py  # Phase 2 - packet-level anomaly detection
-│   └── phase3_supervised/
-│       ├── build_flow_dataset.py   # Task 3.2 - build the flow dataset
-│       ├── preprocess_flow.py      # clean the flow features
-│       ├── train_supervised.py     # Task 3.3 - supervised classifier
-│       ├── flow_anomaly.py         # Task 3.1 + novelty experiment
-│       ├── recheck_phase2_alerts.py# two-stage re-check (headline result)
-│       ├── run3.py                 # ONE-CLICK runner: all of Phase 3
-│       └── analysis.txt            # full Phase 3 process write-up
+│   ├── phase3_supervised/
+│   │   ├── build_flow_dataset.py   # Task 3.2 - build the flow dataset
+│   │   ├── preprocess_flow.py      # clean the flow features
+│   │   ├── train_supervised.py     # Task 3.3 - supervised classifier
+│   │   ├── flow_anomaly.py         # Task 3.1 + novelty experiment
+│   │   ├── ensemble_union.py       # cascade vs union comparison
+│   │   ├── recheck_phase2_alerts.py# two-stage re-check (headline result)
+│   │   ├── run3.py                 # ONE-CLICK runner: all of Phase 3
+│   │   └── analysis.txt            # full Phase 3 process write-up
+│   └── Phase4/
+│       ├── cascade_analysis.py     # fair 3-way comparison + threshold tuning + significance
+│       └── Phase4_comparison.py    # combined confusion matrix, McNemar, comparison plots
 ├── notebooks/           # profiling + preprocessing verification
 ├── results/             # figures, metrics, confusion matrices
 └── report/              # written report + demo video link
@@ -124,18 +131,33 @@ The dataset (~5 GB) downloads to `~/ece597-data` — **outside** the repo, so it
 the folder is created automatically on first run (override the location by setting `ECE597_DATA` in
 your `.env`). Outputs land in `~/ece597-data/samples/`: `packet_sample.csv`,
 `packet_preprocessed.npz` (input for Phase 2), and `packet_bookkeeping.csv` (for Phase 3 flow
-matching). See `data/README.md` for which files are fetched.
+matching). Which files get fetched is defined by the include/exclude patterns at the
+top of `src/phase1_sampling/download_dataset.py`.
 
 ## Running Phase 2 (unsupervised, packet-level)
 
 After Phase 1 has produced `packet_preprocessed.npz`:
 
 ```bash
-cd src/phase2_unsupervised
-python phase2_unsupervised.py
+python -u src/phase2_unsupervised/phase2_unsupervised.py
+python -u src/phase2_unsupervised/phase2_unsupervised.py --seed 7   # different split
 ```
 
-Outputs to `results/`: `phase2_metrics.json`, `phase2_confusion_matrix.png`,
+Six detectors are compared (plain autoencoder, normalised, robust, PCA, Isolation
+Forest, weighted fusion). The winner is selected on **validation** F1, never on test.
+
+Phase 2 reports itself at **two operating points**, because it has two jobs:
+
+- **STANDALONE** (F1-optimal) — Phase 2 judged as an IDS in its own right.
+- **CASCADE** (higher recall) — the alert set handed to Phase 3, which can only
+  remove false positives and can never recover an attack Phase 2 missed.
+
+If `results/operating_point.json` exists (written by Phase 4), the cascade threshold
+is read from it; otherwise it falls back to a recall target. The script prints which
+rule it used.
+
+Outputs to `results/`: `phase2_metrics.json` (both operating points + the detector
+comparison), `phase2_test_scores.npz` (scores for Phase 4), `phase2_confusion_matrix.png`,
 `phase2_roc.png`, and `flagged_packet_ids.csv` (the alerts handed to Phase 3).
 
 ## Running Phase 3 (supervised, flow-level)
@@ -153,6 +175,40 @@ Outputs to `results/`: `phase3_metrics.json` (classifier scores),
 `phase3_operating_curve.json/.png` (the trade-off curve), `phase3_anomaly.json`
 (Task 3.1), plus confusion-matrix and ROC plots. See `analysis.txt` in the
 Phase 3 folder for the full write-up of what each step does and why.
+
+## Running Phase 4 (cross-phase evaluation)
+
+```bash
+python -u src/Phase4/cascade_analysis.py     # 3-way comparison, tuning, significance
+python -u src/Phase4/Phase4_comparison.py    # combined matrix + McNemar + plots
+python -u src/Phase4/Phase4_comparison.py --time   # also measure runtime of each phase
+```
+
+`cascade_analysis.py` scores **every** test packet with both stages and compares
+Phase 2 alone, Phase 3 alone, and the cascade on identical data. Every threshold is
+chosen on validation and reported on test, so no system is tuned on the data it is
+scored on. It runs McNemar's exact test on the cascade against each single stage, and
+writes `results/operating_point.json` with the tuned thresholds.
+
+Outputs to `results/`: `phase4_cascade_analysis.json`, `phase4_cascade_grid.png`
+(F1 across both thresholds), `operating_point.json`, `phase4_combined_metrics.json`,
+`phase4_comparison.png`.
+
+## Full pipeline, in order
+
+```bash
+python -u src/phase1_sampling/run0_1.py                  # Phase 0 + 1
+python -u src/phase2_unsupervised/phase2_unsupervised.py # Phase 2
+python -u src/phase3_supervised/run3.py                  # Phase 3
+python -u src/Phase4/cascade_analysis.py                 # tunes + writes operating_point.json
+python -u src/phase2_unsupervised/phase2_unsupervised.py # re-run at the tuned operating point
+python -u src/phase3_supervised/run3.py
+python -u src/Phase4/Phase4_comparison.py
+```
+
+Run each as a **separate** command. The pipeline is tuned in two passes: the first
+pass produces scores, `cascade_analysis.py` selects the operating point from them, and
+the second pass applies it. Every seed is fixed at 42, so runs are reproducible.
 
 ## Git workflow
 

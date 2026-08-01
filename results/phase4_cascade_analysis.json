@@ -13,30 +13,64 @@
     "t2": 1.8705596233076351
   },
   "phase3_alone": {
-    "precision": 0.7342,
-    "recall": 0.6605,
-    "f1": 0.6954,
-    "accuracy": 0.9882,
-    "tn": 59616,
-    "fp": 298,
-    "fn": 423,
-    "tp": 823,
-    "alerts": 1121,
-    "t3": 0.35
+    "precision": 0.6763,
+    "recall": 0.3756,
+    "f1": 0.483,
+    "accuracy": 0.9836,
+    "tn": 59690,
+    "fp": 224,
+    "fn": 778,
+    "tp": 468,
+    "alerts": 692,
+    "t3": 0.85
   },
   "cascade_best": {
-    "precision": 0.7828,
-    "recall": 0.6709,
-    "f1": 0.7226,
-    "accuracy": 0.9895,
-    "tn": 59682,
-    "fp": 232,
-    "fn": 410,
-    "tp": 836,
-    "alerts": 1068,
-    "t2": 0.07950904467622488,
-    "t3": 0.2
+    "precision": 0.5721,
+    "recall": 0.618,
+    "f1": 0.5941,
+    "accuracy": 0.9828,
+    "tn": 59338,
+    "fp": 576,
+    "fn": 476,
+    "tp": 770,
+    "alerts": 1346,
+    "t2": 0.19690042560884277,
+    "t3": 0.15
   },
   "winner": "Cascade (2 then 3)",
+  "significance_mcnemar": {
+    "cascade_vs_phase3_alone": {
+      "b": 501,
+      "c": 551,
+      "p_value": 0.13081694645594655,
+      "significant": false,
+      "verdict": "no significant difference"
+    },
+    "cascade_vs_phase2_alone": {
+      "b": 1109,
+      "c": 408,
+      "p_value": 5.987275972972367e-75,
+      "significant": true,
+      "verdict": "A better"
+    }
+  },
+  "significance_bootstrap_f1": {
+    "cascade_vs_phase3_alone": {
+      "mean_f1_diff": 0.1111,
+      "ci95_low": 0.0847,
+      "ci95_high": 0.1386,
+      "share_favouring_A": 1.0,
+      "significant": true,
+      "verdict": "A significantly better on F1"
+    },
+    "cascade_vs_phase2_alone": {
+      "mean_f1_diff": 0.1949,
+      "ci95_low": 0.1759,
+      "ci95_high": 0.2143,
+      "share_favouring_A": 1.0,
+      "significant": true,
+      "verdict": "A significantly better on F1"
+    }
+  },
   "match_rate_test": 0.9461
 }

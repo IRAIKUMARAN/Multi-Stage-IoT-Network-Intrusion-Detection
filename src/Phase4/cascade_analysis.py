@@ -80,6 +80,17 @@ def phase3_proba_for(book):
     agg["proba"] = model.predict_proba(prep["scaler"].transform(Xdf.values))[:, 1]
     agg["key"] = flow_key(agg["Src IP"], agg["Dst IP"], agg["Src Port"], agg["Dst Port"])
 
+    # How many of the flows we are about to score were also in the flow model's
+    # own training sample? Those probabilities are partly in-sample and optimistic.
+    tk = RESULTS / "flow_train_keys.csv"
+    if tk.exists():
+        trained_on = set(pd.read_csv(tk)["key"].astype(str))
+        leak = agg["key"].isin(trained_on).mean()
+        print(f"  flows the model actually TRAINED on: {leak:.1%} "
+              f"{'(clean)' if leak < 0.01 else '(CONTAMINATED)'}")
+    else:
+        print("  flow_train_keys.csv not found - re-run train_supervised for the leak check")
+
     lookup = dict(zip(agg["key"], agg["proba"]))
     return keys.map(lookup).to_numpy(dtype=float)
 
@@ -95,6 +106,58 @@ def pred_p3(p3, matched, t3):
 def pred_cascade(s2, p3, matched, t2, t3):
     """Phase 2 gates; Phase 3 confirms. Unmatched alerts keep Phase 2's verdict."""
     return ((s2 > t2) & np.where(matched, np.nan_to_num(p3) >= t3, True)).astype(int)
+
+
+def bootstrap_f1_diff(y, pred_a, pred_b, n_boot=2000, seed=42):
+    """Is A's F1 really higher than B's, or could the gap be sampling noise?
+
+    McNemar tests per-packet correctness, which at a 2% attack rate is dominated by
+    the benign majority. F1 is what we actually claim, so we resample the test set
+    and look at the distribution of the F1 difference.
+    """
+    rng = np.random.default_rng(seed)
+    n = len(y)
+
+    def f1(yy, pp):
+        tp = ((yy == 1) & (pp == 1)).sum()
+        fp = ((yy == 0) & (pp == 1)).sum()
+        fn = ((yy == 1) & (pp == 0)).sum()
+        p = tp / (tp + fp + EPS)
+        r = tp / (tp + fn + EPS)
+        return 2 * p * r / (p + r + EPS)
+
+    diffs = np.empty(n_boot)
+    for i in range(n_boot):
+        s = rng.integers(0, n, n)
+        diffs[i] = f1(y[s], pred_a[s]) - f1(y[s], pred_b[s])
+    lo, hi = np.percentile(diffs, [2.5, 97.5])
+    return {"mean_f1_diff": round(float(diffs.mean()), 4),
+            "ci95_low": round(float(lo), 4), "ci95_high": round(float(hi), 4),
+            "share_favouring_A": round(float((diffs > 0).mean()), 4),
+            "significant": bool(lo > 0),
+            "verdict": "A significantly better on F1" if lo > 0
+                       else ("B significantly better on F1" if hi < 0
+                             else "no significant F1 difference")}
+
+
+def mcnemar(y, pred_a, pred_b):
+    """Paired test on the same packets: is system A better than system B, or is it chance?
+
+    Only the disagreements carry information. b = A right where B was wrong,
+    c = A wrong where B was right.
+    """
+    from scipy.stats import binomtest
+    a_ok, b_ok = pred_a == y, pred_b == y
+    b_cnt = int((a_ok & ~b_ok).sum())
+    c_cnt = int((~a_ok & b_ok).sum())
+    n = b_cnt + c_cnt
+    if n == 0:
+        return {"b": 0, "c": 0, "note": "no disagreements"}
+    p = binomtest(min(b_cnt, c_cnt), n, 0.5, alternative="two-sided").pvalue
+    return {"b": b_cnt, "c": c_cnt, "p_value": float(p),
+            "significant": bool(p < 0.05),
+            "verdict": ("A better" if b_cnt > c_cnt else "B better") if p < 0.05
+                       else "no significant difference"}
 
 
 if __name__ == "__main__":
@@ -146,9 +209,29 @@ if __name__ == "__main__":
     winner = max(rows, key=lambda r: r[1]["f1"])[0]
     print(f"\nbest by F1 on test: {winner}")
 
+    # significance of the cascade against each single-stage system, on the same packets
+    pc = pred_cascade(s2te, p3te, mte, t2_c, t3_c)
+    pp3 = pred_p3(p3te, mte, t3_p3)
+    pp2 = pred_p2(s2te, t2_p2)
+    sig = {"cascade_vs_phase3_alone": mcnemar(yte, pc, pp3),
+           "cascade_vs_phase2_alone": mcnemar(yte, pc, pp2)}
+    print("\nMcNemar (per-packet correctness; dominated by the 98% benign class):")
+    for name, s in sig.items():
+        print(f"  {name:26} b={s['b']:>6} c={s['c']:>6} "
+              f"p={s['p_value']:.3g}  {s['verdict']}")
+
+    boot = {"cascade_vs_phase3_alone": bootstrap_f1_diff(yte, pc, pp3),
+            "cascade_vs_phase2_alone": bootstrap_f1_diff(yte, pc, pp2)}
+    print("\nBootstrap on F1 difference (2000 resamples; the claim we actually make):")
+    for name, s in boot.items():
+        print(f"  {name:26} dF1={s['mean_f1_diff']:+.4f} "
+              f"95% CI [{s['ci95_low']:+.4f}, {s['ci95_high']:+.4f}]  {s['verdict']}")
+
     out = {"selection": "thresholds tuned on validation, reported on test",
            "phase2_alone": rows[0][1], "phase3_alone": rows[1][1],
            "cascade_best": rows[2][1], "winner": winner,
+           "significance_mcnemar": sig,
+           "significance_bootstrap_f1": boot,
            "match_rate_test": round(float(mte.mean()), 4)}
     (RESULTS / "phase4_cascade_analysis.json").write_text(json.dumps(out, indent=2))
 

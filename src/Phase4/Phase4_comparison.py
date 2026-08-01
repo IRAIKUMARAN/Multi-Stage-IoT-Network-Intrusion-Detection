@@ -159,9 +159,9 @@ def save_plots(combined, phase2_alone, phase3_alone):
     x = np.arange(len(metrics))
     bar_width = 0.26
     bars_phase2 = ax2.bar(x - bar_width, phase2_vals, bar_width,
-                           label="Phase 2 alone\n(packet detector)", color=COLOR_PHASE2, edgecolor="white")
+                           label="Phase 2 at cascade\nhandoff point", color=COLOR_PHASE2, edgecolor="white")
     bars_phase3 = ax2.bar(x, phase3_vals, bar_width,
-                           label="Phase 3 alone\n(flow classifier)", color=COLOR_PHASE3, edgecolor="white")
+                           label="Phase 3 on its own\nflow test set", color=COLOR_PHASE3, edgecolor="white")
     bars_combined = ax2.bar(x + bar_width, combined_vals, bar_width,
                              label="Phase 2 + Phase 3\n(combined pipeline)", color=COLOR_COMBINED, edgecolor="white")
 
@@ -221,12 +221,17 @@ if __name__ == "__main__":
     phase2_alone = summarize(phase2)
     phase3_alone = summarize(phase3)
 
+    # These two are NOT the same-denominator "alone" baselines. Phase 2 here is at its
+    # cascade handoff point (high recall, low precision), and Phase 3 here is scored on
+    # its own flow test set. For the like-for-like three-way comparison on identical
+    # packets, see phase4_cascade_analysis.json.
     out = {
         "timing": timing,
         "combined_two_stage_system": combined_public,
         "significance": sig,
-        "phase2_alone": phase2_alone,
-        "phase3_alone": phase3_alone,
+        "phase2_at_cascade_handoff": phase2_alone,
+        "phase3_on_own_flow_testset": phase3_alone,
+        "note": "like-for-like baselines are in phase4_cascade_analysis.json",
     }
     (RESULTS / "phase4_combined_metrics.json").write_text(json.dumps(out, indent=2))
     print("\nsaved:", RESULTS / "phase4_combined_metrics.json")

@@ -1,41 +1,41 @@
 {
   "model": "RandomForest",
   "cv_f1": {
-    "RandomForest": 0.5179691984692993,
-    "HistGradientBoosting": 0.355811568754219,
-    "LogisticRegression": 0.17161344923052074
+    "RandomForest": 0.5420534779557153,
+    "HistGradientBoosting": 0.3664833090085332,
+    "LogisticRegression": 0.18462250096676333
   },
-  "threshold": 0.6828040854315214,
-  "AUC": 0.9322504022646005,
-  "precision": 0.7608695652173914,
-  "recall": 0.5840286054827175,
-  "f1": 0.6608226567768037,
-  "FPR": 0.00385,
-  "FNR": 0.4159713945172825,
-  "tn": 39846,
-  "fp": 154,
-  "fn": 349,
-  "tp": 490,
+  "threshold": 0.71,
+  "AUC": 0.9305648109965314,
+  "precision": 0.6810584958217271,
+  "recall": 0.5196599362380446,
+  "f1": 0.5895117540687161,
+  "FPR": 0.0045736883101320175,
+  "FNR": 0.48034006376195537,
+  "tn": 49840,
+  "fp": 229,
+  "fn": 452,
+  "tp": 489,
   "per_attack_detection": {
     "DDoS-HTTP_Flood": {
-      "n": 178,
-      "detection_rate": 0.9606741573033708
+      "n": 160,
+      "detection_rate": 0.9375
     },
     "DoS-HTTP_Flood": {
-      "n": 166,
-      "detection_rate": 0.7891566265060241
+      "n": 155,
+      "detection_rate": 0.7677419354838709
     },
     "DNS_Spoofing": {
-      "n": 160,
-      "detection_rate": 0.35625
+      "n": 175,
+      "detection_rate": 0.36
     },
     "XSS": {
-      "n": 188,
-      "detection_rate": 0.4308510638297872
+      "n": 235,
+      "detection_rate": 0.3617021276595745
     },
     "Brute_Force": {
-      "n": 147,
-      "detection_rate": 0.3401360544217687
+      "n": 216,
+      "detection_rate": 0.3333333333333333
     }
   }
 }

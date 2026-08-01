@@ -1,5 +1,5 @@
 {
-  "phase2_threshold": 0.07950904467622488,
-  "phase3_threshold": 0.2,
+  "phase2_threshold": 0.19690042560884277,
+  "phase3_threshold": 0.15,
   "source": "validation cascade sweep (cascade_analysis.py)"
 }

@@ -96,14 +96,20 @@ def build_detectors(Xtr, Xva, Xte, yva):
 
 
 def compare(scores, yva, yte):
-    """Score every detector at its own F1-optimal threshold (chosen on validation)."""
-    table = {}
+    """Score every detector at its own F1-optimal threshold (chosen on validation).
+
+    Returns the test table AND the validation F1 of each detector, so the winning
+    detector can be selected without ever looking at the test set.
+    """
+    table, val_f1 = {}, {}
     for name, (s_va, s_te) in scores.items():
-        thr, _ = th.f1_optimal(yva, s_va)
+        thr, f1_va = th.f1_optimal(yva, s_va)
         m = sc.evaluate(yte, (s_te > thr).astype(int), s_te)
         m["threshold"] = thr
+        m["val_f1"] = round(f1_va, 4)
         table[name] = m
-    return table
+        val_f1[name] = f1_va
+    return table, val_f1
 
 
 def plots(yte, pred, scores):
@@ -127,6 +133,11 @@ def plots(yte, pred, scores):
 
 
 if __name__ == "__main__":
+    if "--seed" in sys.argv:
+        SEED = int(sys.argv[sys.argv.index("--seed") + 1])
+        det.SEED = SEED
+        print(f"seed override: {SEED}")
+
     X, y, y_type, book = load_data()
     print(f"X: {X.shape} | attack rate: {y.mean():.4f}")
 
@@ -136,17 +147,18 @@ if __name__ == "__main__":
     print(f"train/val/test: {len(itr)} {len(iva)} {len(ite)}")
 
     scores, arch = build_detectors(Xtr, Xva, Xte, yva)
-    table = compare(scores, yva, yte)
+    table, val_f1 = compare(scores, yva, yte)
 
-    print("\ndetector comparison (F1-optimal operating point, test set):")
-    print(f"  {'method':18s} {'AUC':>6} {'prec':>7} {'recall':>7} {'F1':>7} {'FPR':>7}")
-    for name, m in sorted(table.items(), key=lambda kv: -kv[1]["f1"]):
+    print("\ndetector comparison (F1-optimal operating point):")
+    print(f"  {'method':18s} {'AUC':>6} {'prec':>7} {'recall':>7} {'testF1':>7} {'valF1':>7}")
+    for name, m in sorted(table.items(), key=lambda kv: -kv[1]["val_f1"]):
         print(f"  {name:18s} {m['AUC']:>6.3f} {m['precision']:>7.3f} "
-              f"{m['recall']:>7.3f} {m['f1']:>7.3f} {m['FPR']:>7.3f}")
+              f"{m['recall']:>7.3f} {m['f1']:>7.3f} {m['val_f1']:>7.3f}")
 
-    best = max(table, key=lambda k: table[k]["f1"])
+    best = max(val_f1, key=val_f1.get)          # selected on validation, never on test
     s_va, s_te = scores[best]
-    print(f"\nbest standalone detector: {best} (F1={table[best]['f1']:.3f})")
+    print(f"\nbest standalone detector: {best} "
+          f"(val F1={val_f1[best]:.3f} -> test F1={table[best]['f1']:.3f})")
 
     thr_standalone = table[best]["threshold"]
     pred_standalone = (s_te > thr_standalone).astype(int)
@@ -182,8 +194,11 @@ if __name__ == "__main__":
         "AE_threshold": {**m_cascade, "threshold": thr_cascade},
     }
 
+    metrics["seed"] = SEED
     RESULTS.mkdir(exist_ok=True)
     (RESULTS / "phase2_metrics.json").write_text(json.dumps(metrics, indent=2))
+    if SEED != 42:
+        (RESULTS / f"phase2_metrics_seed{SEED}.json").write_text(json.dumps(metrics, indent=2))
     (RESULTS / "phase2_operating_curve.json").write_text(
         json.dumps(th.operating_curve(yva, s_va), indent=2))
 
@@ -195,6 +210,13 @@ if __name__ == "__main__":
                         test_index=ite, y=yte, score=s_te,
                         attack_type=tte.astype(str), detector=best,
                         val_index=iva, y_val=yva, score_val=s_va)
+
+    # Endpoints of every held-out packet. Phase 3 excludes the matching flows from
+    # its training set, so the flow model never scores a flow it learned from.
+    cols = ["src_ip", "dst_ip", "src_port", "dst_port"]
+    book.iloc[np.concatenate([iva, ite])][cols].drop_duplicates().to_csv(
+        RESULTS / "heldout_endpoints.csv", index=False)
+    print("saved heldout_endpoints.csv (flows Phase 3 must not train on)")
 
     plots(yte, pred_standalone, scores)
     print("saved metrics, operating curve, plots to", RESULTS)

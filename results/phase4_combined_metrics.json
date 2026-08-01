@@ -3,33 +3,34 @@
     "note": "run with --time to measure wall-clock time"
   },
   "combined_two_stage_system": {
-    "tn": 59682,
-    "fp": 232,
-    "fn": 410,
-    "tp": 836,
-    "precision": 0.7828,
-    "recall": 0.6709,
-    "f1": 0.7226,
-    "accuracy": 0.9895,
-    "false_positive_reduction_vs_phase2": 0.962
+    "tn": 59338,
+    "fp": 576,
+    "fn": 476,
+    "tp": 770,
+    "precision": 0.5721,
+    "recall": 0.618,
+    "f1": 0.5941,
+    "accuracy": 0.9828,
+    "false_positive_reduction_vs_phase2": 0.8345
   },
   "significance": {
-    "b": 5871,
-    "c": 76,
+    "b": 2905,
+    "c": 45,
     "p_value": 0.0,
     "significant": true,
     "interpretation": "significant improvement over Phase 2 alone"
   },
-  "phase2_alone": {
-    "precision": 0.1300071275837491,
-    "recall": 0.7319422150882825,
-    "f1": 0.22079651373925674,
-    "accuracy": 0.8948
+  "phase2_at_cascade_handoff": {
+    "precision": 0.18971135940409684,
+    "recall": 0.6540930979133226,
+    "f1": 0.29411764705882354,
+    "accuracy": 0.936
   },
-  "phase3_alone": {
-    "precision": 0.7608695652173914,
-    "recall": 0.5840286054827175,
-    "f1": 0.6608226567768037,
-    "accuracy": 0.9877
-  }
+  "phase3_on_own_flow_testset": {
+    "precision": 0.6810584958217271,
+    "recall": 0.5196599362380446,
+    "f1": 0.5895117540687161,
+    "accuracy": 0.9866
+  },
+  "note": "like-for-like baselines are in phase4_cascade_analysis.json"
 }
