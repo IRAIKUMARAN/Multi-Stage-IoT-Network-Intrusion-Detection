@@ -1,14 +1,13 @@
 {
-  "operating_threshold": 0.15,
-  "operating_point_rule": "tuned on validation by the cascade sweep",
+  "operating_threshold": 0.1,
   "retention_floor_pct": 90.0,
-  "flagged_total": 4296,
-  "matched_to_flow": 4214,
-  "match_rate": 0.981,
-  "false_positives_before": 3463,
-  "false_positives_after": 558,
-  "false_positive_reduction_pct": 83.9,
-  "attacks_reaching_phase3": 751,
-  "attacks_kept": 706,
-  "attack_retention_pct": 94.0
+  "flagged_total": 28083,
+  "matched_to_flow": 27012,
+  "match_rate": 0.962,
+  "false_positives_before": 26039,
+  "false_positives_after": 1354,
+  "false_positive_reduction_pct": 94.8,
+  "attacks_reaching_phase3": 973,
+  "attacks_kept": 903,
+  "attack_retention_pct": 92.8
 }

@@ -46,5 +46,4 @@ __pycache__/
 
 # Exception: small Phase 2 -> Phase 3 handoff file is intentionally tracked
 # (needed by Phase 3; keep it reproducible by always sampling with --seed 42)
-!results/flagged_packet_ids.csvresults/flow_train_keys.csv
-results/phase2_test_scores.npz
+!results/flagged_packet_ids.csv
