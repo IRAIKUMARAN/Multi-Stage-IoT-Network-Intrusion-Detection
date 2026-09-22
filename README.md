@@ -1,4 +1,4 @@
-# ECE 597 Capstone — Multi-Stage IoT Network Intrusion Detection
+# Multi-Stage IoT Network Intrusion Detection
 
 Using **unsupervised + supervised learning** to detect network attacks in the
 CIC IoT-DIAD 2024 dataset. Course project for ECE 597 (Summer 2026),
